@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Free, unlimited YouTube Video and Audio Downloader with stunning glassmorphism UI.">
+    <title>YouTube Downloader</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <!-- Optional for icons -->
+</head>
+
+<body>
+    <div class="background-animation"></div>
+
+    <div class="container glass-panel">
+        <header>
+            <a href="/" class="logo">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" class="feather feather-youtube">
+                    <path
+                        d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.42a2.78 2.78 0 0 0-1.94 2C1 8.16 1 12 1 12s0 3.84.54 5.58a2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2C23 15.84 23 12 23 12s0-3.84-.54-5.58z">
+                    </path>
+                    <polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"></polygon>
+                </svg>
+            </a>
+            <h1>YouTube <span>Downloader</span></h1>
+            <p>Download YouTube videos and audio for free in incredible quality.</p>
+        </header>
+
+        <div class="input-section">
+            <div class="input-wrapper">
+                <input type="text" id="urlInput" placeholder="Paste YouTube link here..." autocomplete="off">
+            </div>
+            <button id="fetchBtn" class="btn primary-btn">
+                <span class="btn-text">Start Download</span>
+                <div class="spinner hidden"></div>
+            </button>
+        </div>
+
+        <div id="errorBox" class="error-box hidden"></div>
+
+        <div id="resultBox" class="result-box hidden">
+            <div class="video-preview">
+                <img id="videoThumb" src="" alt="Video Thumbnail">
+                <h2 id="videoTitle"></h2>
+            </div>
+
+            <div class="download-options">
+                <h3>Select Quality:</h3>
+
+                <div class="format-groups">
+                    <div class="format-group">
+                        <h4>Video (MP4)</h4>
+                        <div id="videoFormats" class="format-list">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <div class="format-group">
+                        <h4>Audio (MP3)</h4>
+                        <div id="audioFormats" class="format-list">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
