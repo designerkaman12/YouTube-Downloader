@@ -60,7 +60,7 @@ app.get('/api/info', async (req, res) => {
         res.json({ title, thumbnail, formats });
     } catch (error) {
         console.error('Error fetching info:', error);
-        res.status(500).json({ error: 'Failed to retrieve video information.' });
+        res.status(500).json({ error: 'YT-DLP Error: ' + (error.message || 'Failed to retrieve info') });
     }
 });
 
