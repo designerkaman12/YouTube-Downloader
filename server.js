@@ -40,8 +40,7 @@ app.get('/api/info', async (req, res) => {
             dumpSingleJson: true,
             noCheckCertificates: true,
             noWarnings: true,
-            addHeader: ['referer:youtube.com'],
-            extractorArgs: 'youtube:player_client=tv'
+            addHeader: ['referer:youtube.com']
         });
 
         const title = info.title;
@@ -100,8 +99,7 @@ app.get('/api/prepare', async (req, res) => {
             output: outputPath,
             ffmpegLocation: ffmpeg,
             noWarnings: true,
-            newline: true,
-            extractorArgs: 'youtube:player_client=tv'
+            newline: true
         };
 
         if (type === 'audio') {
