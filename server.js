@@ -41,7 +41,7 @@ app.get('/api/info', async (req, res) => {
             noCheckCertificates: true,
             noWarnings: true,
             addHeader: ['referer:youtube.com'],
-            extractorArgs: 'youtube:player_client=android'
+            forceIpv6: true
         });
 
         const title = info.title;
@@ -101,7 +101,7 @@ app.get('/api/prepare', async (req, res) => {
             ffmpegLocation: ffmpeg,
             noWarnings: true,
             newline: true,
-            extractorArgs: 'youtube:player_client=android'
+            forceIpv6: true
         };
 
         if (type === 'audio') {
