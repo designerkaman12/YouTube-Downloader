@@ -47,6 +47,19 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
+// Auto-update yt-dlp binary on server startup for latest YouTube fixes
+const { execSync } = require('child_process');
+try {
+    const ytdlpPath = require('youtube-dl-exec').constants?.YOUTUBE_DL_PATH;
+    if (ytdlpPath) {
+        console.log('Updating yt-dlp binary...');
+        execSync(`${ytdlpPath} -U`, { timeout: 30000 });
+        console.log('yt-dlp updated successfully.');
+    }
+} catch (e) {
+    console.log('yt-dlp update skipped:', e.message?.substring(0, 80));
+}
+
 // Store download progress and state internally
 const activeDownloads = {};
 
@@ -62,8 +75,9 @@ app.get('/api/info', async (req, res) => {
             noCheckCertificates: true,
             noWarnings: true,
             noPlaylist: true,
-            extractorArgs: 'youtube:player_client=tv,mweb',
-            addHeader: ['referer:youtube.com']
+            noCacheDir: true,
+            extractorArgs: 'youtube:player_client=tv;player_skip=webpage,configs',
+            addHeader: ['referer:youtube.com', 'User-Agent:Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version']
         });
 
         const title = info.title || 'Unknown Title';
@@ -122,8 +136,9 @@ app.get('/api/prepare', async (req, res) => {
             dumpSingleJson: true,
             noCheckCertificates: true,
             noWarnings: true,
-            extractorArgs: 'youtube:player_client=tv,mweb',
-            addHeader: ['referer:youtube.com']
+            noCacheDir: true,
+            extractorArgs: 'youtube:player_client=tv;player_skip=webpage,configs',
+            addHeader: ['referer:youtube.com', 'User-Agent:Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version']
         });
         let targetFormat = info.formats.find(f => f.format_id === itag);
         if (!targetFormat && itag !== 'best') {
