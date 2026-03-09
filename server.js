@@ -47,6 +47,34 @@ if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
+// YouTube Cookies: write from env var to a file for yt-dlp
+const COOKIES_PATH = path.join(__dirname, 'cookies.txt');
+if (process.env.YT_COOKIES) {
+    fs.writeFileSync(COOKIES_PATH, process.env.YT_COOKIES, 'utf8');
+    console.log('YouTube cookies loaded from environment variable.');
+} else if (fs.existsSync(COOKIES_PATH)) {
+    console.log('YouTube cookies file found on disk.');
+} else {
+    console.log('No YouTube cookies found. Some videos may be blocked by bot verification.');
+}
+
+// Helper: return yt-dlp base options (with cookies if available)
+const getYtDlpOptions = (extra = {}) => {
+    const opts = {
+        noCheckCertificates: true,
+        noWarnings: true,
+        noCacheDir: true,
+        addHeader: ['referer:youtube.com', 'User-Agent:Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version'],
+        ...extra
+    };
+    if (fs.existsSync(COOKIES_PATH)) {
+        opts.cookies = COOKIES_PATH;
+    } else {
+        opts.extractorArgs = 'youtube:player_client=tv;player_skip=webpage,configs';
+    }
+    return opts;
+};
+
 // Auto-update yt-dlp binary on server startup for latest YouTube fixes
 const { execSync } = require('child_process');
 try {
@@ -70,15 +98,10 @@ app.get('/api/info', async (req, res) => {
 
         // Removed YouTube-specific URL parsing. Let yt-dlp handle it dynamically.
 
-        const info = await youtubedl(videoUrl, {
+        const info = await youtubedl(videoUrl, getYtDlpOptions({
             dumpSingleJson: true,
-            noCheckCertificates: true,
-            noWarnings: true,
-            noPlaylist: true,
-            noCacheDir: true,
-            extractorArgs: 'youtube:player_client=tv;player_skip=webpage,configs',
-            addHeader: ['referer:youtube.com', 'User-Agent:Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version']
-        });
+            noPlaylist: true
+        }));
 
         const title = info.title || 'Unknown Title';
         const thumbnail = info.thumbnail || '';
@@ -132,14 +155,9 @@ app.get('/api/prepare', async (req, res) => {
 
         console.log(`User requested PREPARE (Type: ${type}, Format: ${itag}) on ${videoUrl}`);
 
-        const info = await youtubedl(videoUrl, {
-            dumpSingleJson: true,
-            noCheckCertificates: true,
-            noWarnings: true,
-            noCacheDir: true,
-            extractorArgs: 'youtube:player_client=tv;player_skip=webpage,configs',
-            addHeader: ['referer:youtube.com', 'User-Agent:Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version']
-        });
+        const info = await youtubedl(videoUrl, getYtDlpOptions({
+            dumpSingleJson: true
+        }));
         let targetFormat = info.formats.find(f => f.format_id === itag);
         if (!targetFormat && itag !== 'best') {
             return res.status(400).send('Format not found.');
