@@ -62,7 +62,7 @@ app.get('/api/info', async (req, res) => {
             noCheckCertificates: true,
             noWarnings: true,
             noPlaylist: true,
-            extractorArgs: 'youtube:player_client=default,-web',
+            extractorArgs: 'youtube:player_client=tv,mweb',
             addHeader: ['referer:youtube.com']
         });
 
@@ -122,6 +122,7 @@ app.get('/api/prepare', async (req, res) => {
             dumpSingleJson: true,
             noCheckCertificates: true,
             noWarnings: true,
+            extractorArgs: 'youtube:player_client=tv,mweb',
             addHeader: ['referer:youtube.com']
         });
         let targetFormat = info.formats.find(f => f.format_id === itag);
