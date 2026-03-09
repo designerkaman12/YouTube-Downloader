@@ -91,6 +91,22 @@ try {
 // Store download progress and state internally
 const activeDownloads = {};
 
+// Debug endpoint to check server state
+app.get('/api/debug', (req, res) => {
+    const cookiesExist = fs.existsSync(COOKIES_PATH);
+    let cookiesSize = 0;
+    if (cookiesExist) {
+        cookiesSize = fs.statSync(COOKIES_PATH).size;
+    }
+    res.json({
+        cookiesPath: COOKIES_PATH,
+        cookiesExist,
+        cookiesSize,
+        dirname: __dirname,
+        files: fs.readdirSync(__dirname).filter(f => !f.startsWith('node_modules') && !f.startsWith('.'))
+    });
+});
+
 app.get('/api/info', async (req, res) => {
     try {
         let videoUrl = req.query.url;
