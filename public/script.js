@@ -1,8 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     const urlInput = document.getElementById('urlInput');
     const fetchBtn = document.getElementById('fetchBtn');
-    const btnText = fetchBtn.querySelector('.btn-text');
-    const spinner = fetchBtn.querySelector('.spinner');
+    const btnText = fetchBtn ? fetchBtn.querySelector('.btn-text') : null;
+    const spinner = fetchBtn ? fetchBtn.querySelector('.spinner') : null;
 
     const errorBox = document.getElementById('errorBox');
     const resultBox = document.getElementById('resultBox');
@@ -10,6 +10,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoTitle = document.getElementById('videoTitle');
     const videoFormatsContainer = document.getElementById('videoFormats');
     const audioFormatsContainer = document.getElementById('audioFormats');
+    const imageFormatsContainer = document.getElementById('imageFormats');
+
+    // --- Dynamic Branding Logic ---
+    const params = new URLSearchParams(window.location.search);
+    const platform = params.get('p') || 'omniload';
+
+    if (urlInput) {
+        const titleEl = document.querySelector('h1 span');
+        const descEl = document.querySelector('header p');
+        const logoPath = document.querySelector('.logo path');
+        const logoPoly = document.querySelector('.logo polygon');
+
+        const brandConfig = {
+            'youtube': { name: 'YouTube', color: '#ef4444', desc: 'Download Videos, Shorts & MP3s from YouTube in 4K.', placeholder: 'Paste YouTube link here...' },
+            'instagram': { name: 'Instagram', color: '#e1306c', desc: 'Save Reels, Posts, and IGTV directly to your device.', placeholder: 'Paste Instagram Reel or Post link...' },
+            'tiktok': { name: 'TikTok', color: '#25F4EE', desc: 'Save viral TikTok videos without the annoying watermark.', placeholder: 'Paste TikTok video link here...' },
+            'twitter': { name: 'Twitter (X)', color: '#1DA1F2', desc: 'Extract videos and GIFs from any X post instantly.', placeholder: 'Paste X (Twitter) post link here...' },
+            'facebook': { name: 'Facebook', color: '#1877F2', desc: 'Download Facebook watch videos & public posts easily.', placeholder: 'Paste Facebook video link...' },
+            'audio': { name: 'Audio', color: '#10b981', desc: 'Rip pure MP3 audio from any link on the internet.', placeholder: 'Paste any link to extract MP3...' },
+            'omniload': { name: 'Downloader', color: '#6366f1', desc: 'Download video and audio from any platform universally in incredible quality.', placeholder: 'Paste any link you want audio/video/thumbnail/sound effects etc.' }
+        };
+
+        const config = brandConfig[platform] || brandConfig['omniload'];
+        if (titleEl) {
+            titleEl.textContent = config.name === 'Downloader' ? 'Downloader' : config.name;
+            document.documentElement.style.setProperty('--primary', config.color);
+        }
+        if (descEl) descEl.textContent = config.desc;
+        if (urlInput) urlInput.placeholder = config.placeholder;
+    }
+    // ------------------------------
 
     // Utility: format bytes to readable size
     const formatBytes = (bytes, decimals = 2) => {
@@ -47,8 +78,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fetchVideoInfo = async () => {
         const url = urlInput.value.trim();
-        if (!url) {
-            showError('Please enter a valid YouTube URL');
+        if (!url || !url.startsWith('http')) {
+            showError('Please enter a valid URL');
             return;
         }
 
@@ -73,26 +104,82 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const renderResults = (data, originalUrl) => {
-        // Set Preview
-        videoThumb.src = data.thumbnail;
-        videoTitle.textContent = data.title;
+        // Set Preview using Proxy to bypass 403 Forbidden (Instagram/YT blocks)
+        videoThumb.src = data.thumbnail ? `/api/thumbnail?url=${encodeURIComponent(data.thumbnail)}` : 'https://via.placeholder.com/320x180?text=No+Thumbnail';
+        videoTitle.textContent = data.title || 'Untitled Media';
+
+        const platformBadge = document.getElementById('platformBadge');
+        if (platformBadge) {
+            platformBadge.textContent = (data.extractor || 'Unknown').toUpperCase();
+            platformBadge.style.display = 'inline-block';
+        }
 
         // Clear previous formats
         videoFormatsContainer.innerHTML = '';
         audioFormatsContainer.innerHTML = '';
+        imageFormatsContainer.innerHTML = '';
 
-        // Separate formats into strict Video (with audio preferred, or without) vs Audio-only
-        // To keep it clean, we'll try to find formats that have BOTH video and audio. 
-        // If not enough, we list video-only ones (but emphasize they might lack audio).
-        // For simplicity, let's filter formats that are widely used.
+        // Add Thumbnail to Extras Strategy
+        if (data.thumbnail && data.thumbnail !== 'https://via.placeholder.com/320x180?text=No+Thumbnail') {
+            const thumbBtn = document.createElement('a');
+            thumbBtn.href = `/api/thumbnail?url=${encodeURIComponent(data.thumbnail)}`;
+            thumbBtn.target = '_blank';
+            thumbBtn.download = 'thumbnail.jpg';
+            thumbBtn.className = 'format-item';
+            thumbBtn.style.textDecoration = 'none';
+            thumbBtn.style.display = 'block';
+            thumbBtn.style.textAlign = 'center';
+
+            thumbBtn.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                    <div style="text-align:left;">
+                        <div style="font-weight:600; font-size:1.1rem; margin-bottom: 2px;">High-Res Poster</div>
+                        <div style="font-size:0.85rem; color: var(--text-muted)">Save main thumbnail image</div>
+                    </div>
+                    <div style="background:var(--primary); padding:6px 14px; border-radius:8px; font-size:0.9rem; font-weight:600; display:flex; gap:6px; align-items:center;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        Download
+                    </div>
+                </div>
+            `;
+            imageFormatsContainer.appendChild(thumbBtn);
+        }
 
         let videos = data.formats.filter(f => f.hasVideo);
         let audios = data.formats.filter(f => !f.hasVideo && f.hasAudio);
 
-        // Remove duplicates by quality label for videos
+        // Tool-Specific UI Filtering
+        const videoGroup = videoFormatsContainer.closest('.format-group');
+        const imageGroup = imageFormatsContainer.closest('.format-group');
+        const audioGroup = audioFormatsContainer.closest('.format-group');
+
+        if (platform === 'audio' || videos.length === 0) {
+            if (videoGroup) videoGroup.style.display = 'none';
+        } else {
+            if (videoGroup) videoGroup.style.display = 'block';
+        }
+
+        if (platform === 'audio' || !data.thumbnail) {
+            if (imageGroup) imageGroup.style.display = 'none';
+        } else {
+            if (imageGroup) imageGroup.style.display = 'block';
+        }
+
+        if (platform !== 'audio' && audios.length === 0) {
+            if (audioGroup) audioGroup.style.display = 'none';
+        } else {
+            if (audioGroup) audioGroup.style.display = 'block';
+        }
+
+        // Remove duplicates by quality label or exact height
         videos = videos.reduce((acc, current) => {
-            const x = acc.find(item => item.qualityLabel === current.qualityLabel);
-            if (!x) {
+            const h = current.height;
+            const key = h ? `${h}p` : current.qualityLabel;
+            const existing = acc.find(item => {
+                let existingKey = item.height ? `${item.height}p` : item.qualityLabel;
+                return existingKey === key;
+            });
+            if (!existing) {
                 return acc.concat([current]);
             } else {
                 return acc;
@@ -214,9 +301,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (videos.length === 0) {
             videoFormatsContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">No video formats available.</p>';
         } else {
+            // The backend automatically merges bestaudio to any video itag that lacks it.
+            // So we guarantee the user that every video button gives Video + Audio.
             videos.forEach(format => {
-                const label = format.hasAudio ? '' : 'Merged + ';
-                videoFormatsContainer.appendChild(createFormatElement(format, 'video', label));
+                let qLabel = format.qualityLabel || 'HD Video';
+
+                // If it passes height (e.g., 1080), normalize to 1080p
+                if (format.height) {
+                    qLabel = `${format.height}p`;
+                } else if (qLabel.includes('x')) {
+                    // E.g., "750x1333" -> extract the height
+                    const parts = qLabel.split('x');
+                    qLabel = `${parts[1]}p`;
+                } else if (qLabel.toLowerCase().includes('dash')) {
+                    qLabel = 'HD Video';
+                }
+
+                format.qualityLabel = `${qLabel} (Video + Audio)`;
+                videoFormatsContainer.appendChild(createFormatElement(format, 'video'));
             });
         }
 
@@ -232,10 +334,14 @@ document.addEventListener('DOMContentLoaded', () => {
         resultBox.classList.remove('hidden');
     };
 
-    fetchBtn.addEventListener('click', fetchVideoInfo);
-    urlInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            fetchVideoInfo();
-        }
-    });
+    if (fetchBtn) {
+        fetchBtn.addEventListener('click', fetchVideoInfo);
+    }
+    if (urlInput) {
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                fetchVideoInfo();
+            }
+        });
+    }
 });

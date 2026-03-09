@@ -1,0 +1,54 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "api/server.js",
+            "use": "@vercel/node",
+            "config": {
+                "includeFiles": [
+                    "node_modules/youtube-dl-exec/bin/**",
+                    "node_modules/ffmpeg-static/**"
+                ],
+                "maxDuration": 60
+            }
+        },
+        {
+            "src": "index.html",
+            "use": "@vercel/static"
+        },
+        {
+            "src": "tool.html",
+            "use": "@vercel/static"
+        },
+        {
+            "src": "style.css",
+            "use": "@vercel/static"
+        },
+        {
+            "src": "script.js",
+            "use": "@vercel/static"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/(.*)",
+            "dest": "/api/server.js"
+        },
+        {
+            "src": "/tool.html",
+            "dest": "/tool.html"
+        },
+        {
+            "src": "/style.css",
+            "dest": "/style.css"
+        },
+        {
+            "src": "/script.js",
+            "dest": "/script.js"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/index.html"
+        }
+    ]
+}

@@ -4,6 +4,7 @@ const youtubedl = require('youtube-dl-exec');
 const ffmpeg = require('ffmpeg-static');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +12,35 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+
+// Proxy endpoint to bypass 403 Forbidden on thumbnails (e.g. from Instagram)
+app.get('/api/thumbnail', async (req, res) => {
+    let imageUrl = req.query.url;
+    if (!imageUrl) return res.status(400).send('URL is required');
+
+    try {
+        const fetchRes = await fetch(imageUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+            redirect: 'follow'
+        });
+
+        if (!fetchRes.ok) throw new Error(`HTTP Error: ${fetchRes.status}`);
+
+        const arrayBuffer = await fetchRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        res.set('Content-Type', fetchRes.headers.get('content-type') || 'image/jpeg');
+        res.set('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+        res.send(buffer);
+    } catch (e) {
+        console.error('Thumbnail Proxy Error:', e.message);
+        res.redirect('https://via.placeholder.com/320x180?text=No+Thumbnail');
+    }
+});
 
 const DOWNLOAD_DIR = path.join(__dirname, 'downloads');
 if (!fs.existsSync(DOWNLOAD_DIR)) {
@@ -25,26 +55,20 @@ app.get('/api/info', async (req, res) => {
         let videoUrl = req.query.url;
         if (!videoUrl) return res.status(400).json({ error: 'URL required' });
 
-        try {
-            const parsed = new URL(videoUrl);
-            if (parsed.hostname.includes('youtube.com') && parsed.pathname === '/watch') {
-                const v = parsed.searchParams.get('v');
-                if (v) videoUrl = `https://www.youtube.com/watch?v=${v}`;
-            } else if (parsed.hostname.includes('youtu.be')) {
-                videoUrl = `https://youtu.be${parsed.pathname}`;
-            }
-        } catch (e) { }
+        // Removed YouTube-specific URL parsing. Let yt-dlp handle it dynamically.
 
-        console.log(`Fetching info for ${videoUrl} ...`);
         const info = await youtubedl(videoUrl, {
             dumpSingleJson: true,
             noCheckCertificates: true,
             noWarnings: true,
+            noPlaylist: true,
+            extractorArgs: 'youtube:player_client=default,-web',
             addHeader: ['referer:youtube.com']
         });
 
-        const title = info.title;
-        const thumbnail = info.thumbnail;
+        const title = info.title || 'Unknown Title';
+        const thumbnail = info.thumbnail || '';
+        const extractor = info.extractor_key || info.extractor || 'Unknown Platform';
 
         let formats = info.formats.map(f => ({
             itag: f.format_id,
@@ -54,13 +78,32 @@ app.get('/api/info', async (req, res) => {
             hasAudio: f.acodec !== 'none',
             contentLength: f.filesize || f.filesize_approx || 0,
             vcodec: f.vcodec,
-            acodec: f.acodec
+            acodec: f.acodec,
+            width: f.width,
+            height: f.height
         }));
 
-        res.json({ title, thumbnail, formats });
+        res.json({ title, thumbnail, extractor, formats });
     } catch (error) {
-        console.error('Error fetching info:', error);
-        res.status(500).json({ error: 'YT-DLP Error: ' + (error.message || 'Failed to retrieve info') });
+        console.error('Error fetching info:', error.message);
+        let errorMsg = 'Failed to retrieve media properties.';
+        const rawError = error.stderr || error.message || '';
+
+        if (rawError.includes('Sign in to confirm')) {
+            errorMsg = 'This platform requires sign-in or bot verification.';
+        } else if (rawError.includes('video is not available') || rawError.includes('Video unavailable') || rawError.includes('Private video')) {
+            errorMsg = 'This video is private, deleted, or unavailable.';
+        } else if (rawError.includes('Unsupported URL')) {
+            errorMsg = 'This link format or platform is not supported.';
+        } else {
+            const match = rawError.match(/ERROR:\s*([^\n]+)/);
+            if (match && match[1]) {
+                errorMsg = match[1].substring(0, 80) + (match[1].length > 80 ? '...' : '');
+            } else {
+                errorMsg = 'Server failed to parse link details.';
+            }
+        }
+        res.status(500).json({ error: errorMsg });
     }
 });
 
@@ -71,25 +114,22 @@ app.get('/api/prepare', async (req, res) => {
         const itag = req.query.itag;
         const type = req.query.type;
 
-        try {
-            const parsed = new URL(videoUrl);
-            if (parsed.hostname.includes('youtube.com') && parsed.pathname === '/watch') {
-                const v = parsed.searchParams.get('v');
-                if (v) videoUrl = `https://www.youtube.com/watch?v=${v}`;
-            } else if (parsed.hostname.includes('youtu.be')) {
-                videoUrl = `https://youtu.be${parsed.pathname}`;
-            }
-        } catch (e) { }
+        // Removed YouTube-specific URL parsing in prepare as well.
 
         console.log(`User requested PREPARE (Type: ${type}, Format: ${itag}) on ${videoUrl}`);
 
-        const info = await youtubedl(videoUrl, { dumpSingleJson: true });
+        const info = await youtubedl(videoUrl, {
+            dumpSingleJson: true,
+            noCheckCertificates: true,
+            noWarnings: true,
+            addHeader: ['referer:youtube.com']
+        });
         let targetFormat = info.formats.find(f => f.format_id === itag);
         if (!targetFormat && itag !== 'best') {
             return res.status(400).send('Format not found.');
         }
 
-        const cleanTitle = info.title.replace(/[^\w\s-]/g, '').trim();
+        const cleanTitle = (info.title || 'media').replace(/[^\w\s-]/g, '').trim() || 'media';
         const taskId = Date.now().toString() + Math.floor(Math.random() * 1000).toString();
 
         let filename = type === 'audio' ? `${cleanTitle}.mp3` : `${cleanTitle}.mp4`;
@@ -99,7 +139,10 @@ app.get('/api/prepare', async (req, res) => {
             output: outputPath,
             ffmpegLocation: ffmpeg,
             noWarnings: true,
-            newline: true
+            newline: true,
+            concurrentFragments: 8,
+            bufferSize: '1024K',
+            httpChunkSize: '10M'
         };
 
         if (type === 'audio') {
@@ -114,8 +157,7 @@ app.get('/api/prepare', async (req, res) => {
         activeDownloads[taskId] = { progress: 0, status: 'downloading', file: filename, path: outputPath };
         res.json({ taskId });
 
-        // Spin up background yt-dlp to download to disk safely
-        const subprocess = youtubedl.exec(videoUrl, dlOptions, { shell: true });
+        const subprocess = youtubedl.exec(videoUrl, dlOptions);
 
         subprocess.stdout.on('data', (data) => {
             const line = data.toString();
@@ -136,13 +178,30 @@ app.get('/api/prepare', async (req, res) => {
         });
 
         subprocess.catch(err => {
-            console.error('yt-dlp exec error:', err.message);
+            console.error('yt-dlp exec error catch triggered:', err.message);
+            if (err.stderr) {
+                console.error('yt-dlp stderr:', err.stderr);
+            }
+            if (err.stdout) {
+                console.error('yt-dlp stdout:', err.stdout);
+            }
             activeDownloads[taskId].status = 'error';
         });
 
     } catch (error) {
-        console.error('Error in /api/prepare:', error);
-        res.status(500).json({ error: 'Failed to prepare download.' });
+        console.error('Error in /api/prepare:', error.message);
+        let errorMsg = 'Failed to prepare download.';
+        const rawError = error.stderr || error.message || '';
+
+        if (rawError.includes('Sign in to confirm')) {
+            errorMsg = 'This platform requires sign-in or bot verification.';
+        } else {
+            const match = rawError.match(/ERROR:\s*([^\n]+)/);
+            if (match && match[1]) {
+                errorMsg = match[1].substring(0, 80) + (match[1].length > 80 ? '...' : '');
+            }
+        }
+        res.status(500).json({ error: errorMsg });
     }
 });
 

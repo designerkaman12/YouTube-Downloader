@@ -1,0 +1,11 @@
+node_modules
+downloads
+*.webm
+*.exe
+*.rar
+*.err
+*.txt
+test_yt_dlp.js
+server_pid.txt
+#C#
+.git

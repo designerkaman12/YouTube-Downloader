@@ -1,4 +1,9 @@
 node_modules/
 downloads/
-.env
-.DS_Store
+*.webm
+*.exe
+*.rar
+logs.err
+logs.txt
+server_pid.txt
+.vercel/

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Free, unlimited Universal Media Downloader with stunning glassmorphism UI.">
+    <title>OmniLoad Downloader</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <!-- Optional for icons -->
+</head>
+
+<body>
+    <div class="background-animation"></div>
+
+    <nav class="navbar">
+        <div class="nav-container max-w-container">
+            <a href="/" class="nav-logo">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" class="feather feather-youtube"
+                    style="color:var(--primary);">
+                    <path
+                        d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.42a2.78 2.78 0 0 0-1.94 2C1 8.16 1 12 1 12s0 3.84.54 5.58a2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2C23 15.84 23 12 23 12s0-3.84-.54-5.58z">
+                    </path>
+                    <polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"></polygon>
+                </svg>
+                <span class="nav-brand">OmniLoad</span>
+            </a>
+            <div class="nav-links">
+                <a href="/" style="display: inline-flex; align-items: center; gap: 5px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12 19 5 12 12 5"></polyline>
+                    </svg>
+                    Dashboard
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <section class="hero-section max-w-container">
+            <h1>OmniLoad <span>Downloader</span></h1>
+            <p class="hero-subtitle">Download video and audio from any platform universally in incredible quality.</p>
+        </section>
+
+        <section class="input-section max-w-container">
+            <div class="input-wrapper">
+                <input type="text" id="urlInput"
+                    placeholder="Paste any link you want audio/video/thumbnail/sound effects etc." autocomplete="off">
+            </div>
+            <button id="fetchBtn" class="btn primary-btn massive-btn">
+                <span class="btn-text">Process Link</span>
+                <div class="spinner hidden"></div>
+            </button>
+        </section>
+
+        <div id="errorBox" class="error-box hidden max-w-container" style="margin: 0 auto 30px auto; max-width: 800px;">
+        </div>
+
+        <section id="resultSection" class="max-w-container">
+            <div id="resultBox" class="result-box hidden wide-result-box flex-split">
+                <div class="video-preview preview-left">
+                    <img id="videoThumb" src="" alt="Video Thumbnail">
+                    <h2 id="videoTitle"></h2>
+                    <div id="platformBadge" class="platform-badge"></div>
+                </div>
+
+                <div class="download-options options-right">
+                    <h3>Select Download Type:</h3>
+
+                    <div class="format-groups">
+                        <div class="format-group">
+                            <h4>🎬 Video Downloads</h4>
+                            <div id="videoFormats" class="format-list">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <div class="format-group">
+                            <h4>🎵 Audio Only</h4>
+                            <div id="audioFormats" class="format-list">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <div class="format-group" style="grid-column: 1 / -1;">
+                            <h4>🖼️ Extras (Pictures / Thumbnails)</h4>
+                            <div id="imageFormats" class="format-list"
+                                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
