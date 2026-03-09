@@ -92,17 +92,40 @@ try {
 const activeDownloads = {};
 
 // Debug endpoint to check server state
-app.get('/api/debug', (req, res) => {
+app.get('/api/debug', async (req, res) => {
     const cookiesExist = fs.existsSync(COOKIES_PATH);
     let cookiesSize = 0;
     if (cookiesExist) {
         cookiesSize = fs.statSync(COOKIES_PATH).size;
     }
+
+    // Get yt-dlp version
+    let ytdlpVersion = 'unknown';
+    try {
+        const ytdlpPath = require('youtube-dl-exec').constants?.YOUTUBE_DL_PATH;
+        ytdlpVersion = execSync(`${ytdlpPath} --version`, { timeout: 5000 }).toString().trim();
+    } catch (e) { ytdlpVersion = 'error: ' + e.message?.substring(0, 80); }
+
+    // Test a quick fetch if ?test=1
+    let testResult = 'not tested';
+    if (req.query.test) {
+        try {
+            const testUrl = req.query.url || 'https://www.youtube.com/watch?v=KArKyN2Nho4';
+            const opts = getYtDlpOptions({ dumpSingleJson: true, noPlaylist: true });
+            const info = await youtubedl(testUrl, opts);
+            testResult = 'SUCCESS: ' + info.title;
+        } catch (e) {
+            testResult = 'FAIL: ' + (e.stderr || e.message || 'unknown error').substring(0, 500);
+        }
+    }
+
     res.json({
         cookiesPath: COOKIES_PATH,
         cookiesExist,
         cookiesSize,
+        ytdlpVersion,
         dirname: __dirname,
+        testResult,
         files: fs.readdirSync(__dirname).filter(f => !f.startsWith('node_modules') && !f.startsWith('.'))
     });
 });
