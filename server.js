@@ -64,12 +64,15 @@ const getYtDlpOptions = (extra = {}) => {
         noCheckCertificates: true,
         noWarnings: true,
         noCacheDir: true,
-        addHeader: ['referer:youtube.com', 'User-Agent:Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version'],
+        addHeader: ['referer:youtube.com', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'],
         ...extra
     };
     if (fs.existsSync(COOKIES_PATH)) {
         opts.cookies = COOKIES_PATH;
+        // Use web client WITH cookies but skip the webpage bot check entirely
+        opts.extractorArgs = 'youtube:player_client=web;player_skip=webpage,configs';
     } else {
+        // No cookies: use tv client which doesn't require auth
         opts.extractorArgs = 'youtube:player_client=tv;player_skip=webpage,configs';
     }
     return opts;
