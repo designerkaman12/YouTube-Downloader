@@ -39,6 +39,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (urlInput) urlInput.placeholder = config.placeholder;
     }
 
+    const formatBytes = (bytes, decimals = 2) => {
+        if (!+bytes) return '';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+    };
+
     const showError = (message) => {
         errorBox.textContent = message;
         errorBox.classList.remove('hidden');
@@ -119,7 +128,6 @@ document.addEventListener('DOMContentLoaded', () => {
             thumbBtn.className = 'format-item';
             thumbBtn.style.textDecoration = 'none';
             thumbBtn.style.display = 'block';
-            thumbBtn.style.textAlign = 'center';
 
             thumbBtn.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
@@ -136,137 +144,127 @@ document.addEventListener('DOMContentLoaded', () => {
             imageFormatsContainer.appendChild(thumbBtn);
         }
 
-        // Handle picker type (Instagram carousels, etc.)
-        if (data.type === 'picker' && data.picker) {
-            data.picker.forEach((item, i) => {
-                const btn = createDownloadButton(
-                    `${item.type === 'photo' ? '🖼️ Image' : '🎬 Video'} ${i + 1}`,
-                    '',
-                    item.url
-                );
-                videoFormatsContainer.appendChild(btn);
-            });
-            if (data.audio) {
-                audioFormatsContainer.appendChild(
-                    createDownloadButton('🎵 Audio Track', 'MP3', data.audio)
-                );
+        // Split formats
+        let videos = data.formats.filter(f => f.hasVideo);
+        let audios = data.formats.filter(f => !f.hasVideo && f.hasAudio);
+
+        // Video format buttons
+        videos.forEach(format => {
+            const label = format.qualityLabel || 'Video';
+            const hasAudioTag = format.hasAudio ? ' (Video + Audio)' : ' (Video Only)';
+            const size = formatBytes(format.contentLength);
+
+            const btn = document.createElement('button');
+            btn.className = 'format-item';
+            btn.style.width = '100%';
+            btn.style.textAlign = 'left';
+            btn.style.cursor = 'pointer';
+
+            btn.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                    <span class="quality">${label}${hasAudioTag}</span>
+                    <span class="size">${size}</span>
+                </div>
+            `;
+
+            // If format has direct URL, use it; otherwise call /api/download
+            if (format.url) {
+                btn.addEventListener('click', () => {
+                    window.open(format.url, '_blank');
+                });
+            } else {
+                btn.addEventListener('click', async () => {
+                    const qualitySpan = btn.querySelector('.quality');
+                    const originalLabel = qualitySpan.textContent;
+                    qualitySpan.textContent = '⏳ Preparing...';
+                    btn.disabled = true;
+
+                    try {
+                        const res = await fetch(`/api/download?url=${encodeURIComponent(originalUrl)}&itag=${format.itag}`);
+                        const data = await res.json();
+                        if (data.downloadUrl) {
+                            window.open(data.downloadUrl, '_blank');
+                        } else {
+                            throw new Error(data.error || 'Download failed');
+                        }
+                    } catch (err) {
+                        showError(err.message);
+                    } finally {
+                        setTimeout(() => {
+                            qualitySpan.textContent = originalLabel;
+                            btn.disabled = false;
+                        }, 2000);
+                    }
+                });
             }
-            showFormatGroups(true, data.audio ? true : false, data.thumbnail ? true : false);
-            resultBox.classList.remove('hidden');
-            return;
-        }
 
-        // Handle single video/audio with quality options
-        if (data.formats) {
-            let videos = data.formats.filter(f => f.hasVideo);
-            let audios = data.formats.filter(f => !f.hasVideo && f.hasAudio);
+            videoFormatsContainer.appendChild(btn);
+        });
 
-            // Video quality buttons
-            videos.forEach(format => {
-                const btn = createQualityButton(format, originalUrl, 'video');
-                videoFormatsContainer.appendChild(btn);
-            });
+        // Audio format buttons
+        audios.forEach(format => {
+            const label = `🎵 Audio ${format.qualityLabel || '128kbps'}`;
+            const size = formatBytes(format.contentLength);
 
-            // Audio buttons
-            audios.forEach(format => {
-                const btn = format.directUrl
-                    ? createDownloadButton('🎵 ' + format.quality, 'MP3', format.directUrl)
-                    : createQualityButton(format, originalUrl, 'audio');
-                audioFormatsContainer.appendChild(btn);
-            });
+            const btn = document.createElement('button');
+            btn.className = 'format-item';
+            btn.style.width = '100%';
+            btn.style.textAlign = 'left';
+            btn.style.cursor = 'pointer';
 
-            showFormatGroups(videos.length > 0, audios.length > 0, data.thumbnail ? true : false);
-        }
+            btn.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                    <span class="quality">${label}</span>
+                    <span class="size">${size}</span>
+                </div>
+            `;
 
-        resultBox.classList.remove('hidden');
-    };
+            if (format.url) {
+                btn.addEventListener('click', () => {
+                    window.open(format.url, '_blank');
+                });
+            } else {
+                btn.addEventListener('click', async () => {
+                    const qualitySpan = btn.querySelector('.quality');
+                    const originalLabel = qualitySpan.textContent;
+                    qualitySpan.textContent = '⏳ Preparing...';
+                    btn.disabled = true;
 
-    // Show/hide format sections based on available data
-    const showFormatGroups = (showVideo, showAudio, showImage) => {
+                    try {
+                        const res = await fetch(`/api/download?url=${encodeURIComponent(originalUrl)}&itag=${format.itag}`);
+                        const data = await res.json();
+                        if (data.downloadUrl) {
+                            window.open(data.downloadUrl, '_blank');
+                        }
+                    } catch (err) {
+                        showError(err.message);
+                    } finally {
+                        setTimeout(() => {
+                            qualitySpan.textContent = originalLabel;
+                            btn.disabled = false;
+                        }, 2000);
+                    }
+                });
+            }
+
+            audioFormatsContainer.appendChild(btn);
+        });
+
+        // Show/hide format groups
         const videoGroup = videoFormatsContainer.closest('.format-group');
         const audioGroup = audioFormatsContainer.closest('.format-group');
         const imageGroup = imageFormatsContainer.closest('.format-group');
 
-        if (platform === 'audio') showVideo = false;
+        if (platform === 'audio' || videos.length === 0) {
+            if (videoGroup) videoGroup.style.display = 'none';
+        } else {
+            if (videoGroup) videoGroup.style.display = 'block';
+        }
 
-        if (videoGroup) videoGroup.style.display = showVideo ? 'block' : 'none';
-        if (audioGroup) audioGroup.style.display = showAudio ? 'block' : 'none';
-        if (imageGroup) imageGroup.style.display = showImage ? 'block' : 'none';
-    };
+        if (audioGroup) audioGroup.style.display = audios.length > 0 ? 'block' : 'none';
+        if (imageGroup) imageGroup.style.display = data.thumbnail ? 'block' : 'none';
 
-    // Create a button that fetches download URL on click
-    const createQualityButton = (format, originalUrl, type) => {
-        const btn = document.createElement('button');
-        btn.className = 'format-item';
-        btn.style.width = '100%';
-        btn.style.textAlign = 'left';
-        btn.style.cursor = 'pointer';
-
-        const label = type === 'audio' ? `🎵 ${format.quality}` : `🎬 ${format.quality} (Video + Audio)`;
-        btn.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                <span class="quality">${label}</span>
-                <span class="size" style="background:var(--primary); padding:4px 12px; border-radius:6px; font-size:0.85rem; font-weight:600;">Download</span>
-            </div>
-        `;
-
-        btn.addEventListener('click', async () => {
-            const qualitySpan = btn.querySelector('.quality');
-            const sizeSpan = btn.querySelector('.size');
-            const originalLabel = qualitySpan.textContent;
-            const originalSize = sizeSpan.textContent;
-
-            qualitySpan.textContent = '⏳ Preparing...';
-            sizeSpan.textContent = '...';
-            btn.disabled = true;
-
-            try {
-                const quality = format.qualityValue || 'max';
-                const res = await fetch(`/api/download?url=${encodeURIComponent(originalUrl)}&quality=${quality}&type=${type}`);
-                const data = await res.json();
-
-                if (!res.ok || !data.downloadUrl) {
-                    throw new Error(data.error || 'Download failed');
-                }
-
-                // Open download URL
-                qualitySpan.textContent = '✅ Starting download...';
-                window.open(data.downloadUrl, '_blank');
-
-            } catch (err) {
-                showError(err.message || 'Download failed. Try again.');
-            } finally {
-                setTimeout(() => {
-                    qualitySpan.textContent = originalLabel;
-                    sizeSpan.textContent = originalSize;
-                    btn.disabled = false;
-                }, 2000);
-            }
-        });
-
-        return btn;
-    };
-
-    // Create a direct download button (for picker items and audio with direct URLs)
-    const createDownloadButton = (label, sizeText, downloadUrl) => {
-        const btn = document.createElement('a');
-        btn.href = downloadUrl;
-        btn.target = '_blank';
-        btn.className = 'format-item';
-        btn.style.textDecoration = 'none';
-        btn.style.display = 'block';
-        btn.style.cursor = 'pointer';
-
-        btn.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                <span class="quality">${label}</span>
-                <span class="size" style="background:var(--primary); padding:4px 12px; border-radius:6px; font-size:0.85rem; font-weight:600;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                    ${sizeText || 'Download'}
-                </span>
-            </div>
-        `;
-        return btn;
+        resultBox.classList.remove('hidden');
     };
 
     if (fetchBtn) {

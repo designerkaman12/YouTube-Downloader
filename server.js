@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const ytdl = require('@distube/ytdl-core');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,10 +10,7 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// Cobalt API endpoint (public instance)
-const COBALT_API = 'https://api.cobalt.tools';
-
-// Proxy endpoint to bypass 403 Forbidden on thumbnails (e.g. from Instagram)
+// Proxy endpoint to bypass 403 Forbidden on thumbnails
 app.get('/api/thumbnail', async (req, res) => {
     let imageUrl = req.query.url;
     if (!imageUrl) return res.status(400).send('URL is required');
@@ -40,202 +38,156 @@ app.get('/api/thumbnail', async (req, res) => {
     }
 });
 
-// Main API: Get download links via Cobalt API
+// Main API: Get video info and formats
 app.get('/api/info', async (req, res) => {
     try {
         let videoUrl = req.query.url;
         if (!videoUrl) return res.status(400).json({ error: 'URL required' });
 
-        // Detect platform from URL
-        const platform = detectPlatform(videoUrl);
-
-        // Get multiple quality options by requesting different qualities
-        const qualities = ['max', '1080', '720', '480', '360'];
-        const results = [];
-
-        // First, get the default (max quality) response to check status
-        const mainResponse = await cobaltRequest(videoUrl, { quality: 'max' });
-
-        if (mainResponse.status === 'error') {
-            return res.status(500).json({ error: mainResponse.text || 'Failed to process this link.' });
+        // Validate URL looks like YouTube
+        if (!ytdl.validateURL(videoUrl)) {
+            return res.status(400).json({ error: 'Invalid or unsupported URL. Currently supports YouTube links.' });
         }
 
-        if (mainResponse.status === 'rate-limit') {
-            return res.status(429).json({ error: 'Too many requests. Please wait a moment.' });
-        }
+        const info = await ytdl.getInfo(videoUrl);
+        const details = info.videoDetails;
 
-        // Handle picker (Instagram carousels, etc.)
-        if (mainResponse.status === 'picker') {
-            return res.json({
-                title: 'Media Collection',
-                thumbnail: mainResponse.picker?.[0]?.thumb || '',
-                extractor: platform,
-                type: 'picker',
-                picker: mainResponse.picker,
-                audio: mainResponse.audio || null
-            });
-        }
+        const title = details.title || 'Unknown Title';
+        const thumbnail = details.thumbnails?.length
+            ? details.thumbnails[details.thumbnails.length - 1].url
+            : '';
+        const duration = details.lengthSeconds || 0;
+        const author = details.author?.name || '';
 
-        // For redirect/stream: build format list
-        const downloadUrl = mainResponse.url;
+        // Get downloadable formats
+        const allFormats = info.formats;
 
-        // Get audio-only version
-        let audioUrl = null;
-        try {
-            const audioResponse = await cobaltRequest(videoUrl, { quality: 'max', audioOnly: true });
-            if (audioResponse.status === 'redirect' || audioResponse.status === 'stream') {
-                audioUrl = audioResponse.url;
-            }
-        } catch (e) { /* audio not available for this platform */ }
-
-        // Build format cards for different qualities
-        const formats = [];
-
-        for (const q of qualities) {
-            formats.push({
-                quality: q === 'max' ? 'Best' : q + 'p',
-                qualityValue: q,
-                type: 'video',
+        // Video + Audio combined formats
+        let videoFormats = allFormats
+            .filter(f => f.hasVideo && f.hasAudio && f.container === 'mp4')
+            .map(f => ({
+                itag: f.itag,
+                qualityLabel: f.qualityLabel || `${f.height}p`,
+                mimeType: f.mimeType,
                 hasVideo: true,
                 hasAudio: true,
-            });
-        }
+                contentLength: parseInt(f.contentLength) || 0,
+                height: f.height,
+                width: f.width,
+                url: f.url
+            }));
 
-        if (audioUrl) {
-            formats.push({
-                quality: 'MP3 Audio',
-                qualityValue: 'audio',
-                type: 'audio',
+        // Remove duplicates by height
+        const seen = new Set();
+        videoFormats = videoFormats.filter(f => {
+            const key = f.height || f.qualityLabel;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        // Sort by height descending
+        videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
+
+        // Audio-only formats
+        let audioFormats = allFormats
+            .filter(f => f.hasAudio && !f.hasVideo)
+            .map(f => ({
+                itag: f.itag,
+                qualityLabel: `${f.audioBitrate || 128}kbps`,
+                mimeType: f.mimeType,
                 hasVideo: false,
                 hasAudio: true,
-                directUrl: audioUrl
+                contentLength: parseInt(f.contentLength) || 0,
+                audioBitrate: f.audioBitrate,
+                url: f.url
+            }));
+
+        // Keep best audio only
+        audioFormats.sort((a, b) => (b.audioBitrate || 0) - (a.audioBitrate || 0));
+        audioFormats = audioFormats.slice(0, 2);
+
+        // If no combined formats, get video-only + best audio
+        if (videoFormats.length === 0) {
+            const videoOnly = allFormats
+                .filter(f => f.hasVideo && !f.hasAudio && f.container === 'mp4')
+                .map(f => ({
+                    itag: f.itag,
+                    qualityLabel: f.qualityLabel || `${f.height}p`,
+                    mimeType: f.mimeType,
+                    hasVideo: true,
+                    hasAudio: false,
+                    contentLength: parseInt(f.contentLength) || 0,
+                    height: f.height,
+                    width: f.width,
+                    url: f.url,
+                    videoOnly: true
+                }));
+
+            const seenVO = new Set();
+            videoFormats = videoOnly.filter(f => {
+                const key = f.height;
+                if (seenVO.has(key)) return false;
+                seenVO.add(key);
+                return true;
             });
+            videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
         }
 
-        // Try to get video title from YouTube oEmbed or default
-        let title = 'Download Ready';
-        let thumbnail = '';
-        try {
-            if (videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be')) {
-                const oembedRes = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`);
-                if (oembedRes.ok) {
-                    const oembed = await oembedRes.json();
-                    title = oembed.title || title;
-                    thumbnail = oembed.thumbnail_url || '';
-                }
-            } else if (videoUrl.includes('instagram.com')) {
-                title = 'Instagram Media';
-                thumbnail = '';
-            } else if (videoUrl.includes('tiktok.com')) {
-                title = 'TikTok Video';
-            } else if (videoUrl.includes('twitter.com') || videoUrl.includes('x.com')) {
-                title = 'Twitter/X Media';
-            }
-        } catch (e) { /* oembed failed, use defaults */ }
+        const formats = [...videoFormats, ...audioFormats];
 
         res.json({
             title,
             thumbnail,
-            extractor: platform,
-            type: 'single',
-            formats,
-            directUrl: downloadUrl
+            duration,
+            author,
+            extractor: 'YouTube',
+            formats
         });
 
     } catch (error) {
-        console.error('Error in /api/info:', error.message);
-        let errorMsg = 'Failed to process this link.';
+        console.error('Error fetching info:', error.message);
+        let errorMsg = 'Failed to retrieve video information.';
 
-        if (error.message?.includes('fetch failed') || error.message?.includes('ECONNREFUSED')) {
-            errorMsg = 'Download service is temporarily unavailable. Try again in a moment.';
+        if (error.message?.includes('Sign in to confirm')) {
+            errorMsg = 'YouTube requires sign-in verification for this video.';
+        } else if (error.message?.includes('not available') || error.message?.includes('unavailable') || error.message?.includes('private')) {
+            errorMsg = 'This video is private, deleted, or unavailable.';
+        } else if (error.message?.includes('get a client identity') || error.message?.includes('innertube')) {
+            errorMsg = 'YouTube API temporarily blocked. Please try again in a few seconds.';
+        } else {
+            errorMsg = error.message?.substring(0, 100) || errorMsg;
         }
 
         res.status(500).json({ error: errorMsg });
     }
 });
 
-// Download endpoint: fetches from Cobalt with specific quality
+// Download endpoint: stream/proxy the video to the user
 app.get('/api/download', async (req, res) => {
     try {
         const videoUrl = req.query.url;
-        const quality = req.query.quality || 'max';
-        const type = req.query.type || 'video';
+        const itag = req.query.itag;
 
-        if (!videoUrl) return res.status(400).json({ error: 'URL required' });
-
-        const options = {
-            quality: quality === 'Best' ? 'max' : quality.replace('p', ''),
-        };
-
-        if (type === 'audio') {
-            options.audioOnly = true;
-            options.aFormat = 'mp3';
+        if (!videoUrl || !itag) {
+            return res.status(400).json({ error: 'URL and itag required' });
         }
 
-        const response = await cobaltRequest(videoUrl, options);
+        const info = await ytdl.getInfo(videoUrl);
+        const format = info.formats.find(f => f.itag === parseInt(itag));
 
-        if (response.status === 'error') {
-            return res.status(500).json({ error: response.text || 'Download failed.' });
+        if (!format || !format.url) {
+            return res.status(404).json({ error: 'Format not found.' });
         }
 
-        if (response.status === 'redirect' || response.status === 'stream') {
-            return res.json({ downloadUrl: response.url });
-        }
+        // Return the direct download URL — user's browser downloads directly from YouTube
+        res.json({ downloadUrl: format.url });
 
-        res.status(500).json({ error: 'Unexpected response from download service.' });
     } catch (error) {
         console.error('Error in /api/download:', error.message);
         res.status(500).json({ error: 'Download failed. Please try again.' });
     }
 });
-
-// ----- Helper Functions -----
-
-async function cobaltRequest(url, options = {}) {
-    const body = {
-        url: url,
-        videoQuality: options.quality || 'max',
-        filenameStyle: 'pretty',
-        youtubeVideoCodec: 'h264',
-    };
-
-    if (options.audioOnly) {
-        body.downloadMode = 'audio';
-        body.audioFormat = options.aFormat || 'mp3';
-    } else {
-        body.downloadMode = 'auto';
-    }
-
-    const response = await fetch(`${COBALT_API}/`, {
-        method: 'POST',
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Cobalt API error (${response.status}): ${text}`);
-    }
-
-    return await response.json();
-}
-
-function detectPlatform(url) {
-    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
-    if (url.includes('instagram.com')) return 'Instagram';
-    if (url.includes('tiktok.com')) return 'TikTok';
-    if (url.includes('twitter.com') || url.includes('x.com')) return 'Twitter';
-    if (url.includes('facebook.com') || url.includes('fb.watch')) return 'Facebook';
-    if (url.includes('reddit.com')) return 'Reddit';
-    if (url.includes('soundcloud.com')) return 'SoundCloud';
-    if (url.includes('pinterest.com') || url.includes('pin.it')) return 'Pinterest';
-    if (url.includes('twitch.tv')) return 'Twitch';
-    if (url.includes('vimeo.com')) return 'Vimeo';
-    return 'Media';
-}
 
 // Debug endpoint
 app.get('/api/debug', async (req, res) => {
@@ -243,13 +195,13 @@ app.get('/api/debug', async (req, res) => {
     if (req.query.test) {
         try {
             const testUrl = req.query.url || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-            const result = await cobaltRequest(testUrl, { quality: '720' });
-            testResult = `${result.status}: ${result.url || result.text || 'no url'}`;
+            const info = await ytdl.getInfo(testUrl);
+            testResult = 'SUCCESS: ' + info.videoDetails.title + ' (' + info.formats.length + ' formats)';
         } catch (e) {
-            testResult = 'FAIL: ' + e.message?.substring(0, 300);
+            testResult = 'FAIL: ' + (e.message || 'unknown error').substring(0, 300);
         }
     }
-    res.json({ api: COBALT_API, testResult });
+    res.json({ engine: '@distube/ytdl-core', testResult });
 });
 
 app.listen(PORT, () => {
