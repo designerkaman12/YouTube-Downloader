@@ -19,8 +19,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (urlInput) {
         const titleEl = document.querySelector('h1 span');
         const descEl = document.querySelector('header p');
-        const logoPath = document.querySelector('.logo path');
-        const logoPoly = document.querySelector('.logo polygon');
 
         const brandConfig = {
             'youtube': { name: 'YouTube', color: '#ef4444', desc: 'Download Videos, Shorts & MP3s from YouTube in 4K.', placeholder: 'Paste YouTube link here...' },
@@ -40,17 +38,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (descEl) descEl.textContent = config.desc;
         if (urlInput) urlInput.placeholder = config.placeholder;
     }
-    // ------------------------------
-
-    // Utility: format bytes to readable size
-    const formatBytes = (bytes, decimals = 2) => {
-        if (!+bytes) return 'N/A';
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-    };
 
     const showError = (message) => {
         errorBox.textContent = message;
@@ -104,8 +91,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const renderResults = (data, originalUrl) => {
-        // Set Preview using Proxy to bypass 403 Forbidden (Instagram/YT blocks)
-        videoThumb.src = data.thumbnail ? `/api/thumbnail?url=${encodeURIComponent(data.thumbnail)}` : 'https://via.placeholder.com/320x180?text=No+Thumbnail';
+        // Set Preview
+        if (data.thumbnail) {
+            videoThumb.src = `/api/thumbnail?url=${encodeURIComponent(data.thumbnail)}`;
+        } else {
+            videoThumb.src = 'https://via.placeholder.com/320x180?text=No+Thumbnail';
+        }
         videoTitle.textContent = data.title || 'Untitled Media';
 
         const platformBadge = document.getElementById('platformBadge');
@@ -119,8 +110,8 @@ document.addEventListener('DOMContentLoaded', () => {
         audioFormatsContainer.innerHTML = '';
         imageFormatsContainer.innerHTML = '';
 
-        // Add Thumbnail to Extras Strategy
-        if (data.thumbnail && data.thumbnail !== 'https://via.placeholder.com/320x180?text=No+Thumbnail') {
+        // Add Thumbnail download to Extras
+        if (data.thumbnail) {
             const thumbBtn = document.createElement('a');
             thumbBtn.href = `/api/thumbnail?url=${encodeURIComponent(data.thumbnail)}`;
             thumbBtn.target = '_blank';
@@ -145,193 +136,137 @@ document.addEventListener('DOMContentLoaded', () => {
             imageFormatsContainer.appendChild(thumbBtn);
         }
 
-        let videos = data.formats.filter(f => f.hasVideo);
-        let audios = data.formats.filter(f => !f.hasVideo && f.hasAudio);
-
-        // Tool-Specific UI Filtering
-        const videoGroup = videoFormatsContainer.closest('.format-group');
-        const imageGroup = imageFormatsContainer.closest('.format-group');
-        const audioGroup = audioFormatsContainer.closest('.format-group');
-
-        if (platform === 'audio' || videos.length === 0) {
-            if (videoGroup) videoGroup.style.display = 'none';
-        } else {
-            if (videoGroup) videoGroup.style.display = 'block';
-        }
-
-        if (platform === 'audio' || !data.thumbnail) {
-            if (imageGroup) imageGroup.style.display = 'none';
-        } else {
-            if (imageGroup) imageGroup.style.display = 'block';
-        }
-
-        if (platform !== 'audio' && audios.length === 0) {
-            if (audioGroup) audioGroup.style.display = 'none';
-        } else {
-            if (audioGroup) audioGroup.style.display = 'block';
-        }
-
-        // Remove duplicates by quality label or exact height
-        videos = videos.reduce((acc, current) => {
-            const h = current.height;
-            const key = h ? `${h}p` : current.qualityLabel;
-            const existing = acc.find(item => {
-                let existingKey = item.height ? `${item.height}p` : item.qualityLabel;
-                return existingKey === key;
+        // Handle picker type (Instagram carousels, etc.)
+        if (data.type === 'picker' && data.picker) {
+            data.picker.forEach((item, i) => {
+                const btn = createDownloadButton(
+                    `${item.type === 'photo' ? '🖼️ Image' : '🎬 Video'} ${i + 1}`,
+                    '',
+                    item.url
+                );
+                videoFormatsContainer.appendChild(btn);
             });
-            if (!existing) {
-                return acc.concat([current]);
-            } else {
-                return acc;
+            if (data.audio) {
+                audioFormatsContainer.appendChild(
+                    createDownloadButton('🎵 Audio Track', 'MP3', data.audio)
+                );
             }
-        }, []);
-
-        // Sort videos highest quality first
-        videos.sort((a, b) => parseInt(b.qualityLabel) - parseInt(a.qualityLabel));
-
-        // Sort audios by bitrate or just take the highest
-        // We'll just list a couple of audio streams.
-
-        const createFormatElement = (format, type, labelPrefix = '') => {
-            const btn = document.createElement('button');
-            btn.className = 'format-item';
-            btn.style.width = '100%';
-            btn.style.textAlign = 'left';
-            btn.style.cursor = 'pointer';
-            btn.style.position = 'relative';
-            btn.style.overflow = 'hidden';
-
-            const contentDiv = document.createElement('div');
-            contentDiv.style.position = 'relative';
-            contentDiv.style.zIndex = '2';
-            contentDiv.style.display = 'flex';
-            contentDiv.style.justifyContent = 'space-between';
-            contentDiv.style.width = '100%';
-
-            const progressBg = document.createElement('div');
-            progressBg.style.position = 'absolute';
-            progressBg.style.top = '0';
-            progressBg.style.left = '0';
-            progressBg.style.height = '100%';
-            progressBg.style.width = '0%';
-            progressBg.style.backgroundColor = 'rgba(99, 102, 241, 0.4)';
-            progressBg.style.zIndex = '1';
-            progressBg.style.transition = 'width 0.2s';
-
-            const qualitySpan = document.createElement('span');
-            qualitySpan.className = 'quality';
-            qualitySpan.textContent = labelPrefix + (format.qualityLabel || 'Audio');
-
-            const sizeSpan = document.createElement('span');
-            sizeSpan.className = 'size';
-            sizeSpan.textContent = format.contentLength ? formatBytes(format.contentLength) : '';
-
-            contentDiv.appendChild(qualitySpan);
-            contentDiv.appendChild(sizeSpan);
-            btn.appendChild(progressBg);
-            btn.appendChild(contentDiv);
-
-            btn.addEventListener('click', async () => {
-                const originalText = qualitySpan.textContent;
-                qualitySpan.innerHTML = `${originalText} <span class="spinner" style="display:inline-block; width:12px; height:12px; border-width:2px; margin-left: 10px; border-top-color:var(--primary)"></span>`;
-                btn.disabled = true;
-
-                try {
-                    const prepareUrl = `/api/prepare?url=${encodeURIComponent(originalUrl)}&itag=${format.itag}&type=${type}`;
-                    const res = await fetch(prepareUrl);
-                    if (!res.ok) throw new Error('Failed to prepare download');
-
-                    const { taskId } = await res.json();
-
-                    // Start SSE Connection
-                    const evtSource = new EventSource(`/api/progress?id=${taskId}`);
-
-                    evtSource.onmessage = (event) => {
-                        const data = JSON.parse(event.data);
-
-                        if (data.progress > 0) {
-                            progressBg.style.width = `${data.progress}%`;
-                        }
-
-                        if (data.status === 'done') {
-                            evtSource.close();
-                            progressBg.style.width = '100%';
-
-                            // Trigger final browser file download
-                            const a = document.createElement('a');
-                            a.href = `/api/serve?id=${taskId}`;
-                            a.setAttribute('download', '');
-                            document.body.appendChild(a);
-                            setTimeout(() => {
-                                a.click();
-                                document.body.removeChild(a);
-                            }, 500);
-
-                            // Reset UI
-                            setTimeout(() => {
-                                qualitySpan.textContent = originalText;
-                                progressBg.style.width = '0%';
-                                btn.disabled = false;
-                            }, 3000);
-                        } else if (data.status === 'error') {
-                            evtSource.close();
-                            throw new Error('Download failed on server');
-                        }
-                    };
-
-                    evtSource.onerror = () => {
-                        evtSource.close();
-                        showError('Connection to server progress lost.');
-                        qualitySpan.textContent = originalText;
-                        progressBg.style.width = '0%';
-                        btn.disabled = false;
-                    }
-
-                } catch (err) {
-                    showError(err.message || 'Download failed to start.');
-                    qualitySpan.textContent = originalText;
-                    progressBg.style.width = '0%';
-                    btn.disabled = false;
-                }
-            });
-
-            return btn;
-        };
-
-        if (videos.length === 0) {
-            videoFormatsContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">No video formats available.</p>';
-        } else {
-            // The backend automatically merges bestaudio to any video itag that lacks it.
-            // So we guarantee the user that every video button gives Video + Audio.
-            videos.forEach(format => {
-                let qLabel = format.qualityLabel || 'HD Video';
-
-                // If it passes height (e.g., 1080), normalize to 1080p
-                if (format.height) {
-                    qLabel = `${format.height}p`;
-                } else if (qLabel.includes('x')) {
-                    // E.g., "750x1333" -> extract the height
-                    const parts = qLabel.split('x');
-                    qLabel = `${parts[1]}p`;
-                } else if (qLabel.toLowerCase().includes('dash')) {
-                    qLabel = 'HD Video';
-                }
-
-                format.qualityLabel = `${qLabel} (Video + Audio)`;
-                videoFormatsContainer.appendChild(createFormatElement(format, 'video'));
-            });
+            showFormatGroups(true, data.audio ? true : false, data.thumbnail ? true : false);
+            resultBox.classList.remove('hidden');
+            return;
         }
 
-        if (audios.length === 0) {
-            audioFormatsContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">No audio formats available.</p>';
-        } else {
-            // Keep the best audio
-            audios.slice(0, 3).forEach(format => {
-                audioFormatsContainer.appendChild(createFormatElement(format, 'audio', 'MP3 '));
+        // Handle single video/audio with quality options
+        if (data.formats) {
+            let videos = data.formats.filter(f => f.hasVideo);
+            let audios = data.formats.filter(f => !f.hasVideo && f.hasAudio);
+
+            // Video quality buttons
+            videos.forEach(format => {
+                const btn = createQualityButton(format, originalUrl, 'video');
+                videoFormatsContainer.appendChild(btn);
             });
+
+            // Audio buttons
+            audios.forEach(format => {
+                const btn = format.directUrl
+                    ? createDownloadButton('🎵 ' + format.quality, 'MP3', format.directUrl)
+                    : createQualityButton(format, originalUrl, 'audio');
+                audioFormatsContainer.appendChild(btn);
+            });
+
+            showFormatGroups(videos.length > 0, audios.length > 0, data.thumbnail ? true : false);
         }
 
         resultBox.classList.remove('hidden');
+    };
+
+    // Show/hide format sections based on available data
+    const showFormatGroups = (showVideo, showAudio, showImage) => {
+        const videoGroup = videoFormatsContainer.closest('.format-group');
+        const audioGroup = audioFormatsContainer.closest('.format-group');
+        const imageGroup = imageFormatsContainer.closest('.format-group');
+
+        if (platform === 'audio') showVideo = false;
+
+        if (videoGroup) videoGroup.style.display = showVideo ? 'block' : 'none';
+        if (audioGroup) audioGroup.style.display = showAudio ? 'block' : 'none';
+        if (imageGroup) imageGroup.style.display = showImage ? 'block' : 'none';
+    };
+
+    // Create a button that fetches download URL on click
+    const createQualityButton = (format, originalUrl, type) => {
+        const btn = document.createElement('button');
+        btn.className = 'format-item';
+        btn.style.width = '100%';
+        btn.style.textAlign = 'left';
+        btn.style.cursor = 'pointer';
+
+        const label = type === 'audio' ? `🎵 ${format.quality}` : `🎬 ${format.quality} (Video + Audio)`;
+        btn.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                <span class="quality">${label}</span>
+                <span class="size" style="background:var(--primary); padding:4px 12px; border-radius:6px; font-size:0.85rem; font-weight:600;">Download</span>
+            </div>
+        `;
+
+        btn.addEventListener('click', async () => {
+            const qualitySpan = btn.querySelector('.quality');
+            const sizeSpan = btn.querySelector('.size');
+            const originalLabel = qualitySpan.textContent;
+            const originalSize = sizeSpan.textContent;
+
+            qualitySpan.textContent = '⏳ Preparing...';
+            sizeSpan.textContent = '...';
+            btn.disabled = true;
+
+            try {
+                const quality = format.qualityValue || 'max';
+                const res = await fetch(`/api/download?url=${encodeURIComponent(originalUrl)}&quality=${quality}&type=${type}`);
+                const data = await res.json();
+
+                if (!res.ok || !data.downloadUrl) {
+                    throw new Error(data.error || 'Download failed');
+                }
+
+                // Open download URL
+                qualitySpan.textContent = '✅ Starting download...';
+                window.open(data.downloadUrl, '_blank');
+
+            } catch (err) {
+                showError(err.message || 'Download failed. Try again.');
+            } finally {
+                setTimeout(() => {
+                    qualitySpan.textContent = originalLabel;
+                    sizeSpan.textContent = originalSize;
+                    btn.disabled = false;
+                }, 2000);
+            }
+        });
+
+        return btn;
+    };
+
+    // Create a direct download button (for picker items and audio with direct URLs)
+    const createDownloadButton = (label, sizeText, downloadUrl) => {
+        const btn = document.createElement('a');
+        btn.href = downloadUrl;
+        btn.target = '_blank';
+        btn.className = 'format-item';
+        btn.style.textDecoration = 'none';
+        btn.style.display = 'block';
+        btn.style.cursor = 'pointer';
+
+        btn.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                <span class="quality">${label}</span>
+                <span class="size" style="background:var(--primary); padding:4px 12px; border-radius:6px; font-size:0.85rem; font-weight:600;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                    ${sizeText || 'Download'}
+                </span>
+            </div>
+        `;
+        return btn;
     };
 
     if (fetchBtn) {
