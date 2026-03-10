@@ -17,7 +17,7 @@ app.use(express.json());
 // Subscribe here: https://rapidapi.com/manhg/api/auto-download-all-in-one/pricing
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
-const API_HOST = 'auto-download-all-one.p.rapidapi.com';
+const API_HOST = 'auto-download-all-in-one.p.rapidapi.com';
 
 console.log(`🔑 API Key loaded: ${RAPIDAPI_KEY ? 'Yes (' + RAPIDAPI_KEY.substring(0, 8) + '...)' : 'NOT SET — add RAPIDAPI_KEY env variable!'}`);
 
