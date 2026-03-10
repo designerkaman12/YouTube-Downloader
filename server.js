@@ -9,18 +9,18 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// ─── RAPIDAPI CONFIGURATION ────────────────────────────────────
-// Uses "YouTube Video and Shorts Downloader" API on RapidAPI.
-// Subscribe (free plan): https://rapidapi.com/youtube86/api/youtube-video-and-shorts-downloader
-// Set RAPIDAPI_KEY env var on Render (or locally).
+// ─── COBALT API CONFIGURATION ──────────────────────────────────
+// Uses cobalt.tools community API instances — FREE, no API key needed.
+// Multiple instances for fallback reliability.
+// Source: https://instances.cobalt.best
 
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
-const RAPIDAPI_HOST = 'youtube-video-and-shorts-downloader.p.rapidapi.com';
+const COBALT_INSTANCES = [
+    'https://cobalt-api.meowing.de',    // 92% score
+    'https://cobalt-backend.canine.tools', // 76%
+    'https://capi.3kh0.net',            // 72%
+];
 
-if (!RAPIDAPI_KEY) {
-    console.warn('⚠️  RAPIDAPI_KEY not set! YouTube downloads will fail.');
-    console.warn('   Get a free key at: https://rapidapi.com/youtube86/api/youtube-video-and-shorts-downloader');
-}
+console.log(`📦 Configured ${COBALT_INSTANCES.length} cobalt instances for fallback.`);
 
 // ─── HELPER: Extract video ID from YouTube URL ─────────────────
 function extractVideoId(url) {
@@ -47,62 +47,80 @@ function isValidYouTubeUrl(url) {
     return !!extractVideoId(url);
 }
 
-// ─── HELPER: Call RapidAPI with retry ──────────────────────────
-async function callRapidAPI(videoId, maxRetries = 3) {
-    if (!RAPIDAPI_KEY) {
-        throw new Error('Server API key not configured. Contact the admin.');
-    }
-
+// ─── HELPER: Call cobalt API with instance fallback ────────────
+async function callCobaltAPI(videoUrl, quality = '1080') {
     let lastError;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let i = 0; i < COBALT_INSTANCES.length; i++) {
+        const instance = COBALT_INSTANCES[i];
         try {
-            console.log(`  ↳ RapidAPI attempt ${attempt}/${maxRetries} for video ${videoId}...`);
+            console.log(`  ↳ Trying cobalt instance ${i + 1}/${COBALT_INSTANCES.length}: ${instance}`);
 
-            const apiUrl = `https://${RAPIDAPI_HOST}/download.php?id=${encodeURIComponent(videoId)}`;
-            const response = await fetch(apiUrl, {
-                method: 'GET',
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+            const response = await fetch(instance + '/', {
+                method: 'POST',
                 headers: {
-                    'x-rapidapi-host': RAPIDAPI_HOST,
-                    'x-rapidapi-key': RAPIDAPI_KEY
-                }
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: videoUrl,
+                    videoQuality: quality,
+                    youtubeVideoCodec: 'h264',
+                    filenameStyle: 'basic'
+                }),
+                signal: controller.signal
             });
+
+            clearTimeout(timeout);
 
             if (!response.ok) {
                 const errorText = await response.text();
-                console.log(`  ❌ API returned ${response.status}: ${errorText.substring(0, 200)}`);
+                console.log(`  ❌ Instance returned ${response.status}: ${errorText.substring(0, 200)}`);
 
-                if (response.status === 401 || response.status === 403) {
-                    throw new Error('API key is invalid or subscription expired. Go to rapidapi.com and subscribe to the free plan.');
-                }
+                // If it's a rate limit, try next instance
                 if (response.status === 429) {
-                    throw new Error('API quota exceeded. Try again later or upgrade your plan.');
+                    console.log(`  ⏳ Rate limited, trying next instance...`);
+                    continue;
                 }
 
-                throw new Error(`API error (${response.status}): ${errorText.substring(0, 100)}`);
+                throw new Error(`Cobalt error (${response.status}): ${errorText.substring(0, 150)}`);
             }
 
             const data = await response.json();
-            console.log(`  ✅ RapidAPI success on attempt ${attempt}`);
+            console.log(`  ✅ Cobalt success from ${instance}, status: ${data.status}`);
             return data;
 
         } catch (err) {
             lastError = err;
-            console.log(`  ❌ Attempt ${attempt} failed: ${(err.message || '').substring(0, 150)}`);
+            const msg = err.name === 'AbortError' ? 'Request timed out' : err.message;
+            console.log(`  ❌ Instance ${instance} failed: ${msg.substring(0, 150)}`);
 
-            if (err.message.includes('API key') || err.message.includes('quota')) {
-                throw err;
-            }
-
-            if (attempt < maxRetries) {
-                const delay = attempt * 2000;
-                console.log(`  ⏳ Waiting ${delay}ms before retry...`);
-                await new Promise(r => setTimeout(r, delay));
-            }
+            // Try next instance
+            continue;
         }
     }
 
-    throw lastError;
+    throw lastError || new Error('All cobalt instances failed. Please try again later.');
+}
+
+// ─── HELPER: Get video metadata from YouTube oEmbed ────────────
+async function getVideoMeta(videoUrl) {
+    try {
+        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`;
+        const resp = await fetch(oembedUrl, { 
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            signal: AbortSignal.timeout(10000)
+        });
+        if (resp.ok) {
+            return await resp.json();
+        }
+    } catch (e) {
+        console.log('  ⚠️ oEmbed fetch failed:', e.message);
+    }
+    return null;
 }
 
 // ─── Proxy endpoint to bypass 403 Forbidden on thumbnails ──────
@@ -144,82 +162,98 @@ app.get('/api/info', async (req, res) => {
         }
 
         const videoId = extractVideoId(videoUrl);
-        console.log(`\n📥 Fetching info via RapidAPI for videoId=${videoId} ...`);
-        const apiData = await callRapidAPI(videoId);
+        // Normalize the URL to standard format
+        const normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-        // Log raw response structure for debugging
-        console.log(`  📦 API response keys: ${Object.keys(apiData).join(', ')}`);
+        console.log(`\n📥 Fetching info for ${normalizedUrl} ...`);
 
-        // ─── Parse the response ─────────────────────────────────
-        // This API typically returns: { title, thumbnail, url: [...streams] }
-        // Each stream has: url, mimeType, quality, qualityLabel, type, itag, etc.
+        // Fetch metadata and download link in parallel
+        const [meta, cobaltData] = await Promise.all([
+            getVideoMeta(normalizedUrl),
+            callCobaltAPI(normalizedUrl, '1080')
+        ]);
 
-        const title = apiData.title || apiData.Title || 'YouTube Video';
-        const thumbnail = apiData.thumbnail || `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+        const title = meta?.title || 'YouTube Video';
+        const author = meta?.author_name || '';
+        const thumbnail = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
 
-        // Build formats from the API response
+        // Build formats from cobalt response
         const formats = [];
 
-        // The API returns streams in various places
-        const streams = apiData.url || apiData.formats || apiData.links || apiData.adaptiveFormats || [];
+        if (cobaltData.status === 'tunnel' || cobaltData.status === 'redirect') {
+            // Single download link — best quality
+            formats.push({
+                itag: 1,
+                qualityLabel: '1080p (Best)',
+                mimeType: 'video/mp4',
+                hasVideo: true,
+                hasAudio: true,
+                contentLength: 0,
+                height: 1080,
+                width: 1920,
+                url: cobaltData.url
+            });
+        } else if (cobaltData.status === 'picker') {
+            // Multiple options
+            if (cobaltData.picker && Array.isArray(cobaltData.picker)) {
+                for (const item of cobaltData.picker) {
+                    if (item.type === 'video' && item.url) {
+                        formats.push({
+                            itag: formats.length + 1,
+                            qualityLabel: `Video ${formats.length + 1}`,
+                            mimeType: 'video/mp4',
+                            hasVideo: true,
+                            hasAudio: true,
+                            contentLength: 0,
+                            height: 720,
+                            width: 1280,
+                            url: item.url
+                        });
+                    }
+                }
+            }
+        } else if (cobaltData.status === 'error') {
+            const errorCode = cobaltData.error?.code || cobaltData.error || 'unknown';
+            console.log(`  ⚠️ Cobalt error code: ${errorCode}`);
+            return res.status(500).json({ 
+                error: `Video processing failed: ${errorCode}. The video may be restricted or unavailable.` 
+            });
+        }
 
-        if (Array.isArray(streams) && streams.length > 0) {
-            // Pick video+audio streams (muxed), sorted by quality
-            for (const s of streams) {
-                const mimeType = s.mimeType || s.type || 'video/mp4';
-                const hasVideo = mimeType.startsWith('video/');
-                const hasAudio = !s.audioQuality ? true : true; // muxed streams have both
-
-                // Skip audio-only or non-mp4 for simplicity
-                if (mimeType.includes('audio/') && !mimeType.includes('video/')) continue;
-
-                formats.push({
-                    itag: s.itag || formats.length + 1,
-                    qualityLabel: s.qualityLabel || s.quality || 'Unknown',
-                    mimeType: mimeType,
-                    hasVideo: hasVideo,
-                    hasAudio: hasAudio,
-                    contentLength: s.contentLength || 0,
-                    height: s.height || 0,
-                    width: s.width || 0,
-                    url: s.url || s.link || ''
-                });
+        // If no formats found, try to get at least a lower quality
+        if (formats.length === 0) {
+            console.log('  ⚠️ No formats from 1080p, trying 720p...');
+            try {
+                const fallbackData = await callCobaltAPI(normalizedUrl, '720');
+                if (fallbackData.status === 'tunnel' || fallbackData.status === 'redirect') {
+                    formats.push({
+                        itag: 1,
+                        qualityLabel: '720p',
+                        mimeType: 'video/mp4',
+                        hasVideo: true,
+                        hasAudio: true,
+                        contentLength: 0,
+                        height: 720,
+                        width: 1280,
+                        url: fallbackData.url
+                    });
+                }
+            } catch (e) {
+                console.log('  ❌ 720p fallback also failed:', e.message);
             }
         }
 
-        // If API returned a single download link instead of array
         if (formats.length === 0) {
-            const singleUrl = apiData.link || apiData.downloadUrl || apiData.download_url || '';
-            if (singleUrl) {
-                formats.push({
-                    itag: 1,
-                    qualityLabel: 'Best Quality',
-                    mimeType: 'video/mp4',
-                    hasVideo: true,
-                    hasAudio: true,
-                    contentLength: 0,
-                    height: 1080,
-                    width: 1920,
-                    url: singleUrl
-                });
-            }
+            return res.status(500).json({ error: 'Could not get download link. The video may be age-restricted or unavailable.' });
         }
 
-        if (formats.length === 0) {
-            console.error('  ⚠️ API returned no download links:', JSON.stringify(apiData).substring(0, 500));
-            return res.status(500).json({ error: 'API returned no download link. The video may be restricted.' });
-        }
-
-        // Sort by height (quality) descending
-        formats.sort((a, b) => (b.height || 0) - (a.height || 0));
-
-        console.log(`  🎬 Found ${formats.length} format(s), best: ${formats[0].qualityLabel}`);
+        console.log(`  🎬 Found ${formats.length} format(s)`);
 
         res.json({
             title,
             thumbnail,
-            duration: apiData.duration || apiData.lengthSeconds || 0,
-            author: apiData.author || apiData.channelTitle || '',
+            duration: 0,
+            author,
             extractor: 'YouTube',
             formats
         });
@@ -243,33 +277,20 @@ app.get('/api/download', async (req, res) => {
             return res.status(400).json({ error: 'Invalid YouTube URL.' });
         }
 
-        console.log(`\n⬇️  Download request for videoId=${videoId}`);
-        const apiData = await callRapidAPI(videoId);
+        const normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        console.log(`\n⬇️  Download request for ${normalizedUrl}`);
 
-        let downloadUrl = '';
+        const cobaltData = await callCobaltAPI(normalizedUrl, '1080');
 
-        // Try array of streams first
-        const streams = apiData.url || apiData.formats || apiData.links || [];
-        if (Array.isArray(streams) && streams.length > 0) {
-            // Find best mp4 stream
-            const mp4Stream = streams.find(s => (s.mimeType || s.type || '').includes('video/mp4') && s.url);
-            if (mp4Stream) {
-                downloadUrl = mp4Stream.url;
-            } else if (streams[0] && streams[0].url) {
-                downloadUrl = streams[0].url;
-            }
+        if (cobaltData.status === 'tunnel' || cobaltData.status === 'redirect') {
+            return res.json({ downloadUrl: cobaltData.url });
         }
 
-        // Fallback to single link
-        if (!downloadUrl) {
-            downloadUrl = apiData.link || apiData.downloadUrl || apiData.download_url || '';
+        if (cobaltData.status === 'picker' && cobaltData.picker?.[0]?.url) {
+            return res.json({ downloadUrl: cobaltData.picker[0].url });
         }
 
-        if (!downloadUrl) {
-            return res.status(404).json({ error: 'No download link found.' });
-        }
-
-        res.json({ downloadUrl });
+        return res.status(404).json({ error: 'No download link found.' });
 
     } catch (error) {
         console.error('Error in /api/download:', error.message);
@@ -281,8 +302,8 @@ app.get('/api/download', async (req, res) => {
 app.get('/api/status', (req, res) => {
     res.json({
         status: 'ok',
-        engine: 'RapidAPI (YouTube Video and Shorts Downloader)',
-        apiKeyLoaded: !!RAPIDAPI_KEY,
+        engine: 'Cobalt (community instances — no API key needed)',
+        instances: COBALT_INSTANCES.length,
         uptime: Math.floor(process.uptime()) + 's'
     });
 });
@@ -292,25 +313,23 @@ app.get('/api/debug', async (req, res) => {
     let testResult = 'not tested';
     if (req.query.test) {
         try {
-            const testUrl = req.query.url || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-            const testId = extractVideoId(testUrl) || 'dQw4w9WgXcQ';
-            const data = await callRapidAPI(testId, 2);
-            testResult = `SUCCESS: ${data.title || 'got response'} — keys: ${Object.keys(data).join(', ')}`;
+            const testUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+            const data = await callCobaltAPI(testUrl, '360');
+            testResult = `SUCCESS: status=${data.status}, url=${(data.url || 'picker').substring(0, 80)}`;
         } catch (e) {
             testResult = 'FAIL: ' + (e.message || 'unknown error').substring(0, 300);
         }
     }
     res.json({
-        engine: 'RapidAPI (YouTube Video and Shorts Downloader)',
-        host: RAPIDAPI_HOST,
-        apiKeyLoaded: !!RAPIDAPI_KEY,
+        engine: 'Cobalt (community instances)',
+        instances: COBALT_INSTANCES,
         testResult
     });
 });
 
 app.listen(PORT, () => {
     console.log(`\n🚀 OmniLoad server running on http://localhost:${PORT}`);
-    console.log(`   Engine: RapidAPI - YouTube Video and Shorts Downloader`);
-    console.log(`   API Key: ${RAPIDAPI_KEY ? '✅ Loaded' : '❌ Not set (downloads will fail)'}`);
+    console.log(`   Engine: Cobalt API (NO API key needed!)`);
+    console.log(`   Instances: ${COBALT_INSTANCES.length} configured`);
     console.log('');
 });
