@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const ytdl = require('@distube/ytdl-core');
 
 const app = express();
@@ -9,6 +10,155 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+
+// ─── COOKIE-BASED AGENT SETUP ──────────────────────────────────
+// This is the KEY fix: YouTube blocks cloud server IPs unless
+// requests come with valid browser cookies proving a real user.
+// We parse cookies.txt and create a proper ytdl agent.
+
+let ytdlAgent = null;
+
+function setupCookieAgent() {
+    // Priority 1: Read from YT_COOKIES env var (for Render deployment)
+    let cookieData = process.env.YT_COOKIES || '';
+
+    // Priority 2: Fall back to cookies.txt file
+    const cookiesFilePath = path.join(__dirname, 'cookies.txt');
+    if (!cookieData && fs.existsSync(cookiesFilePath)) {
+        cookieData = fs.readFileSync(cookiesFilePath, 'utf-8');
+    }
+
+    if (!cookieData) {
+        console.warn('⚠️  No cookies found. YouTube WILL block requests from cloud servers.');
+        console.warn('   Fix: Add cookies.txt or set YT_COOKIES env var on Render.');
+        return null;
+    }
+
+    try {
+        // Parse Netscape cookie format into cookie objects
+        const cookies = [];
+        const lines = cookieData.split('\n');
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) continue;
+
+            const parts = trimmed.split('\t');
+            if (parts.length >= 7) {
+                cookies.push({
+                    domain: parts[0],
+                    httpOnly: parts[1] === 'TRUE',
+                    path: parts[2],
+                    secure: parts[3] === 'TRUE',
+                    expires: parseInt(parts[4]) || 0,
+                    name: parts[5],
+                    value: parts[6]
+                });
+            }
+        }
+
+        if (cookies.length === 0) {
+            console.warn('⚠️  Cookies file found but no valid cookies parsed.');
+            return null;
+        }
+
+        // Create the ytdl agent with cookies
+        const agent = ytdl.createAgent(cookies);
+        console.log(`✅ Cookie agent created with ${cookies.length} cookies.`);
+        return agent;
+
+    } catch (err) {
+        console.error('❌ Failed to create cookie agent:', err.message);
+        // Try alternative: create agent from cookies with different parsing
+        try {
+            // Direct approach: read cookies as simple key-value for header
+            const cookieHeader = parseCookiesAsHeader(cookieData);
+            if (cookieHeader) {
+                console.log('✅ Fallback cookie header created.');
+                return { cookieHeader };
+            }
+        } catch (e) {
+            console.error('❌ Fallback cookie parsing also failed:', e.message);
+        }
+        return null;
+    }
+}
+
+function parseCookiesAsHeader(cookieData) {
+    const pairs = [];
+    const lines = cookieData.split('\n');
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const parts = trimmed.split('\t');
+        if (parts.length >= 7) {
+            pairs.push(`${parts[5]}=${parts[6]}`);
+        }
+    }
+    return pairs.length > 0 ? pairs.join('; ') : null;
+}
+
+ytdlAgent = setupCookieAgent();
+
+// ─── HELPER: Get ytdl options with cookies ─────────────────────
+function getYtdlOptions() {
+    const opts = {
+        requestOptions: {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+        }
+    };
+
+    if (ytdlAgent) {
+        if (ytdlAgent.cookieHeader) {
+            // Fallback mode: add cookie as header
+            opts.requestOptions.headers['Cookie'] = ytdlAgent.cookieHeader;
+        } else {
+            // Proper agent mode
+            opts.agent = ytdlAgent;
+        }
+    }
+
+    return opts;
+}
+
+// ─── HELPER: Fetch info with retry ─────────────────────────────
+async function getInfoWithRetry(videoUrl, maxRetries = 3) {
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            console.log(`  ↳ Attempt ${attempt}/${maxRetries}...`);
+            const options = getYtdlOptions();
+            const info = await ytdl.getInfo(videoUrl, options);
+            console.log(`  ✅ Success on attempt ${attempt}`);
+            return info;
+        } catch (err) {
+            lastError = err;
+            const msg = err.message || '';
+            console.log(`  ❌ Attempt ${attempt} failed: ${msg.substring(0, 150)}`);
+
+            // Don't retry if video genuinely doesn't exist
+            if (msg.includes('Video unavailable') || msg.includes('Private video') ||
+                msg.includes('removed') || msg.includes('not exist') ||
+                msg.includes('not a valid YouTube')) {
+                throw err;
+            }
+
+            // Wait before retry (exponential backoff)
+            if (attempt < maxRetries) {
+                const delay = attempt * 2000;
+                console.log(`  ⏳ Waiting ${delay}ms before retry...`);
+                await new Promise(r => setTimeout(r, delay));
+            }
+        }
+    }
+
+    throw lastError;
+}
 
 // Proxy endpoint to bypass 403 Forbidden on thumbnails
 app.get('/api/thumbnail', async (req, res) => {
@@ -49,7 +199,8 @@ app.get('/api/info', async (req, res) => {
             return res.status(400).json({ error: 'Invalid or unsupported URL. Currently supports YouTube links.' });
         }
 
-        const info = await ytdl.getInfo(videoUrl);
+        console.log(`\n📥 Fetching info for ${videoUrl} ...`);
+        const info = await getInfoWithRetry(videoUrl);
         const details = info.videoDetails;
 
         const title = details.title || 'Unknown Title';
@@ -147,16 +298,18 @@ app.get('/api/info', async (req, res) => {
 
     } catch (error) {
         console.error('Error fetching info:', error.message);
-        let errorMsg = 'Failed to retrieve video information.';
+        let errorMsg = 'Failed to process this link.';
 
         if (error.message?.includes('Sign in to confirm')) {
-            errorMsg = 'YouTube requires sign-in verification for this video.';
+            errorMsg = 'YouTube requires sign-in verification. Server cookies may have expired — please refresh them.';
         } else if (error.message?.includes('not available') || error.message?.includes('unavailable') || error.message?.includes('private')) {
             errorMsg = 'This video is private, deleted, or unavailable.';
         } else if (error.message?.includes('get a client identity') || error.message?.includes('innertube')) {
             errorMsg = 'YouTube API temporarily blocked. Please try again in a few seconds.';
+        } else if (error.message?.includes('bot')) {
+            errorMsg = 'YouTube detected bot access. Server cookies may need to be refreshed.';
         } else {
-            errorMsg = error.message?.substring(0, 100) || errorMsg;
+            errorMsg = error.message?.substring(0, 150) || errorMsg;
         }
 
         res.status(500).json({ error: errorMsg });
@@ -173,14 +326,15 @@ app.get('/api/download', async (req, res) => {
             return res.status(400).json({ error: 'URL and itag required' });
         }
 
-        const info = await ytdl.getInfo(videoUrl);
+        console.log(`\n⬇️  Download request: itag=${itag} for ${videoUrl}`);
+        const info = await getInfoWithRetry(videoUrl);
         const format = info.formats.find(f => f.itag === parseInt(itag));
 
         if (!format || !format.url) {
             return res.status(404).json({ error: 'Format not found.' });
         }
 
-        // Return the direct download URL — user's browser downloads directly from YouTube
+        // Return the direct download URL
         res.json({ downloadUrl: format.url });
 
     } catch (error) {
@@ -189,21 +343,60 @@ app.get('/api/download', async (req, res) => {
     }
 });
 
+// Health/Status endpoint
+app.get('/api/status', (req, res) => {
+    res.json({
+        status: 'ok',
+        engine: '@distube/ytdl-core',
+        cookiesLoaded: !!ytdlAgent,
+        uptime: Math.floor(process.uptime()) + 's'
+    });
+});
+
 // Debug endpoint
 app.get('/api/debug', async (req, res) => {
     let testResult = 'not tested';
     if (req.query.test) {
         try {
             const testUrl = req.query.url || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-            const info = await ytdl.getInfo(testUrl);
+            const info = await getInfoWithRetry(testUrl, 2);
             testResult = 'SUCCESS: ' + info.videoDetails.title + ' (' + info.formats.length + ' formats)';
         } catch (e) {
             testResult = 'FAIL: ' + (e.message || 'unknown error').substring(0, 300);
         }
     }
-    res.json({ engine: '@distube/ytdl-core', testResult });
+    res.json({
+        engine: '@distube/ytdl-core',
+        cookiesLoaded: !!ytdlAgent,
+        testResult
+    });
+});
+
+// Endpoint to refresh cookies at runtime (POST with cookie text body)
+app.post('/api/refresh-cookies', express.text({ limit: '50kb' }), (req, res) => {
+    const secret = req.query.key;
+    const expectedKey = process.env.ADMIN_KEY || 'omniload-admin';
+
+    if (secret !== expectedKey) {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    try {
+        // Save to file
+        const cookiesFilePath = path.join(__dirname, 'cookies.txt');
+        fs.writeFileSync(cookiesFilePath, req.body, 'utf-8');
+
+        // Reload agent
+        ytdlAgent = setupCookieAgent();
+
+        res.json({ success: true, cookiesLoaded: !!ytdlAgent });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.listen(PORT, () => {
-    console.log(`OmniLoad server running on http://localhost:${PORT}`);
+    console.log(`\n🚀 OmniLoad server running on http://localhost:${PORT}`);
+    console.log(`   Cookies: ${ytdlAgent ? '✅ Loaded' : '❌ Not loaded (YouTube will likely block requests)'}`);
+    console.log('');
 });
