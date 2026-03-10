@@ -79,14 +79,14 @@ async function callRapidAPI(videoUrl, maxRetries = 3) {
 
                 // Don't retry on auth errors
                 if (response.status === 401 || response.status === 403) {
-                    throw new Error('API key is invalid or expired. Contact the admin.');
+                    throw new Error('API key is invalid or the free plan is not subscribed. Go to rapidapi.com and subscribe to the Basic (free) plan.');
                 }
-                // Don't retry on rate limit (429) — wait won't help much
+                // 429 = rate limit OR unsubscribed free plan
                 if (response.status === 429) {
-                    throw new Error('API rate limit reached. Please try again later.');
+                    throw new Error('API quota exceeded or free plan not subscribed. Go to rapidapi.com, subscribe to the Basic (free) plan, and try again.');
                 }
 
-                throw new Error(`API error: ${response.status}`);
+                throw new Error(`API error (${response.status}): ${errorText.substring(0, 100)}`);
             }
 
             const data = await response.json();
@@ -198,19 +198,7 @@ app.get('/api/info', async (req, res) => {
 
     } catch (error) {
         console.error('Error fetching info:', error.message);
-        let errorMsg = 'Failed to process this link.';
-
-        if (error.message?.includes('API key')) {
-            errorMsg = 'Server API key issue. Please contact the admin.';
-        } else if (error.message?.includes('rate limit')) {
-            errorMsg = 'Too many requests. Please try again in a few minutes.';
-        } else if (error.message?.includes('API error')) {
-            errorMsg = 'Download service temporarily unavailable. Please try again.';
-        } else {
-            errorMsg = error.message?.substring(0, 150) || errorMsg;
-        }
-
-        res.status(500).json({ error: errorMsg });
+        res.status(500).json({ error: error.message?.substring(0, 250) || 'Failed to process this link.' });
     }
 });
 
