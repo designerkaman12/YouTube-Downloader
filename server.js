@@ -197,6 +197,69 @@ app.get('/api/info', async (req, res) => {
     }
 });
 
+// ─── API ENDPOINT: /api/proxy ─────────────────────────────────
+// Proxies a download URL through our server (bypasses IP-locked URLs)
+app.get('/api/proxy', async (req, res) => {
+    const downloadUrl = req.query.url;
+    const filename = req.query.filename || 'download';
+
+    if (!downloadUrl) {
+        return res.status(400).json({ error: 'Missing "url" query parameter' });
+    }
+
+    console.log(`\n⬇️  PROXY download: ${downloadUrl.substring(0, 80)}...`);
+
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+
+        const response = await fetch(downloadUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://www.youtube.com/',
+                'Origin': 'https://www.youtube.com'
+            },
+            signal: controller.signal
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+            console.error(`  ❌ Proxy fetch failed: ${response.status}`);
+            return res.status(response.status).json({ error: `Download failed with status ${response.status}` });
+        }
+
+        // Forward content headers
+        const contentType = response.headers.get('content-type') || 'application/octet-stream';
+        const contentLength = response.headers.get('content-length');
+
+        res.setHeader('Content-Type', contentType);
+        if (contentLength) res.setHeader('Content-Length', contentLength);
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        // Stream the response body to the client
+        const reader = response.body.getReader();
+        const pump = async () => {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                res.write(Buffer.from(value));
+            }
+            res.end();
+        };
+
+        await pump();
+        console.log(`  ✅ Proxy download complete: ${filename}`);
+
+    } catch (err) {
+        console.error(`  ❌ Proxy error: ${err.message}`);
+        if (!res.headersSent) {
+            res.status(500).json({ error: `Download failed: ${err.message}` });
+        }
+    }
+});
+
 // ─── API ENDPOINT: /api/download ──────────────────────────────
 // Returns a direct download URL (redirects to the media file)
 app.get('/api/download', async (req, res) => {

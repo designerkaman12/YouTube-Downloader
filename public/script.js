@@ -159,6 +159,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const audioTag = format.audioAvailable ? ' (Video + Audio)' : ' (Video Only)';
             const ext = format.extension ? ` • ${format.extension.toUpperCase()}` : '';
             const size = format.size || '';
+            const safeTitle = (data.title || 'video').replace(/[^a-zA-Z0-9_\- ]/g, '').substring(0, 50);
+            const filename = `${safeTitle}_${format.quality || 'video'}.${format.extension || 'mp4'}`;
+            const proxyUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
 
             const btn = document.createElement('a');
             btn.className = 'format-item';
@@ -167,9 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.style.cursor = 'pointer';
             btn.style.textDecoration = 'none';
             btn.style.display = 'block';
-            btn.href = format.url;
-            btn.target = '_blank';
-            btn.rel = 'noopener';
+            btn.href = proxyUrl;
 
             btn.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
@@ -192,6 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const label = `🎵 Audio ${format.quality || '128kbps'}`;
             const ext = format.extension ? ` • ${format.extension.toUpperCase()}` : '';
             const size = format.size || '';
+            const safeTitle = (data.title || 'audio').replace(/[^a-zA-Z0-9_\- ]/g, '').substring(0, 50);
+            const filename = `${safeTitle}_audio.${format.extension || 'm4a'}`;
+            const proxyUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
 
             const btn = document.createElement('a');
             btn.className = 'format-item';
@@ -200,9 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.style.cursor = 'pointer';
             btn.style.textDecoration = 'none';
             btn.style.display = 'block';
-            btn.href = format.url;
-            btn.target = '_blank';
-            btn.rel = 'noopener';
+            btn.href = proxyUrl;
 
             btn.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
