@@ -161,7 +161,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const size = format.size || '';
             const safeTitle = (data.title || 'video').replace(/[^a-zA-Z0-9_\- ]/g, '').substring(0, 50);
             const filename = `${safeTitle}_${format.quality || 'video'}.${format.extension || 'mp4'}`;
-            const proxyUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
+
+            // YouTube: use /api/stream with itag (server-side streaming)
+            // Others: use /api/proxy with direct URL
+            let downloadUrl;
+            if (data.platform === 'YouTube' && format.itag) {
+                downloadUrl = `/api/stream?url=${encodeURIComponent(data.url)}&itag=${format.itag}&filename=${encodeURIComponent(filename)}`;
+            } else if (format.url) {
+                downloadUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
+            } else {
+                downloadUrl = '#';
+            }
 
             const btn = document.createElement('a');
             btn.className = 'format-item';
@@ -170,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.style.cursor = 'pointer';
             btn.style.textDecoration = 'none';
             btn.style.display = 'block';
-            btn.href = proxyUrl;
+            btn.href = downloadUrl;
 
             btn.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
@@ -195,7 +205,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const size = format.size || '';
             const safeTitle = (data.title || 'audio').replace(/[^a-zA-Z0-9_\- ]/g, '').substring(0, 50);
             const filename = `${safeTitle}_audio.${format.extension || 'm4a'}`;
-            const proxyUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
+
+            let downloadUrl;
+            if (data.platform === 'YouTube' && format.itag) {
+                downloadUrl = `/api/stream?url=${encodeURIComponent(data.url)}&itag=${format.itag}&filename=${encodeURIComponent(filename)}`;
+            } else if (format.url) {
+                downloadUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
+            } else {
+                downloadUrl = '#';
+            }
 
             const btn = document.createElement('a');
             btn.className = 'format-item';
@@ -204,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.style.cursor = 'pointer';
             btn.style.textDecoration = 'none';
             btn.style.display = 'block';
-            btn.href = proxyUrl;
+            btn.href = downloadUrl;
 
             btn.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
