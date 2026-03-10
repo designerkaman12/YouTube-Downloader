@@ -17,7 +17,7 @@ app.use(express.json());
 // Subscribe here: https://rapidapi.com/manhg/api/auto-download-all-in-one/pricing
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
-const API_HOST = 'auto-download-all-in-one1.p.rapidapi.com';
+const API_HOST = 'auto-download-all-one.p.rapidapi.com';
 
 console.log(`🔑 API Key loaded: ${RAPIDAPI_KEY ? 'Yes (' + RAPIDAPI_KEY.substring(0, 8) + '...)' : 'NOT SET — add RAPIDAPI_KEY env variable!'}`);
 
@@ -76,7 +76,7 @@ async function callDownloadAPI(url) {
         throw new Error('RAPIDAPI_KEY is not set. Add it as an environment variable on Render.');
     }
 
-    const apiUrl = `https://${API_HOST}/all`;
+    const apiUrl = `https://${API_HOST}/v1/social/autolink`;
 
     console.log(`  📡 Calling API: POST ${apiUrl} with url: ${url.substring(0, 80)}...`);
 
