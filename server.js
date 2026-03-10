@@ -1,8 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
-const ytdl = require('@distube/ytdl-core');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,140 +9,96 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// ─── COOKIE-BASED AGENT SETUP ──────────────────────────────────
-// This is the KEY fix: YouTube blocks cloud server IPs unless
-// requests come with valid browser cookies proving a real user.
-// We parse cookies.txt and create a proper ytdl agent.
+// ─── RAPIDAPI CONFIGURATION ────────────────────────────────────
+// Permanent solution: uses a third-party API to download YouTube
+// videos. No cookies needed, no YouTube bot detection issues.
+// Set RAPIDAPI_KEY env var on Render (or locally).
 
-let ytdlAgent = null;
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
+const RAPIDAPI_HOST = 'youtube-downloader-api-best-resolution.p.rapidapi.com';
 
-function setupCookieAgent() {
-    // Priority 1: Read from YT_COOKIES env var (for Render deployment)
-    let cookieData = process.env.YT_COOKIES || '';
+if (!RAPIDAPI_KEY) {
+    console.warn('⚠️  RAPIDAPI_KEY not set! YouTube downloads will fail.');
+    console.warn('   Get a free key at: https://rapidapi.com/ytjar/api/youtube-downloader-api-best-resolution');
+}
 
-    // Priority 2: Fall back to cookies.txt file
-    const cookiesFilePath = path.join(__dirname, 'cookies.txt');
-    if (!cookieData && fs.existsSync(cookiesFilePath)) {
-        cookieData = fs.readFileSync(cookiesFilePath, 'utf-8');
-    }
-
-    if (!cookieData) {
-        console.warn('⚠️  No cookies found. YouTube WILL block requests from cloud servers.');
-        console.warn('   Fix: Add cookies.txt or set YT_COOKIES env var on Render.');
-        return null;
-    }
-
+// ─── HELPER: Extract video ID from YouTube URL ─────────────────
+function extractVideoId(url) {
     try {
-        // Parse Netscape cookie format into cookie objects
-        const cookies = [];
-        const lines = cookieData.split('\n');
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) continue;
-
-            const parts = trimmed.split('\t');
-            if (parts.length >= 7) {
-                cookies.push({
-                    domain: parts[0],
-                    httpOnly: parts[1] === 'TRUE',
-                    path: parts[2],
-                    secure: parts[3] === 'TRUE',
-                    expires: parseInt(parts[4]) || 0,
-                    name: parts[5],
-                    value: parts[6]
-                });
+        const urlObj = new URL(url);
+        // Handle youtu.be/VIDEO_ID
+        if (urlObj.hostname === 'youtu.be') {
+            return urlObj.pathname.slice(1);
+        }
+        // Handle youtube.com/watch?v=VIDEO_ID
+        if (urlObj.hostname.includes('youtube.com')) {
+            // Regular watch URL
+            if (urlObj.searchParams.has('v')) {
+                return urlObj.searchParams.get('v');
             }
+            // Shorts URL: youtube.com/shorts/VIDEO_ID
+            const shortsMatch = urlObj.pathname.match(/\/shorts\/([a-zA-Z0-9_-]+)/);
+            if (shortsMatch) return shortsMatch[1];
+            // Embed URL: youtube.com/embed/VIDEO_ID
+            const embedMatch = urlObj.pathname.match(/\/embed\/([a-zA-Z0-9_-]+)/);
+            if (embedMatch) return embedMatch[1];
         }
-
-        if (cookies.length === 0) {
-            console.warn('⚠️  Cookies file found but no valid cookies parsed.');
-            return null;
-        }
-
-        // Create the ytdl agent with cookies
-        const agent = ytdl.createAgent(cookies);
-        console.log(`✅ Cookie agent created with ${cookies.length} cookies.`);
-        return agent;
-
-    } catch (err) {
-        console.error('❌ Failed to create cookie agent:', err.message);
-        // Try alternative: create agent from cookies with different parsing
-        try {
-            // Direct approach: read cookies as simple key-value for header
-            const cookieHeader = parseCookiesAsHeader(cookieData);
-            if (cookieHeader) {
-                console.log('✅ Fallback cookie header created.');
-                return { cookieHeader };
-            }
-        } catch (e) {
-            console.error('❌ Fallback cookie parsing also failed:', e.message);
-        }
-        return null;
-    }
+    } catch (e) { /* invalid URL */ }
+    return null;
 }
 
-function parseCookiesAsHeader(cookieData) {
-    const pairs = [];
-    const lines = cookieData.split('\n');
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const parts = trimmed.split('\t');
-        if (parts.length >= 7) {
-            pairs.push(`${parts[5]}=${parts[6]}`);
-        }
-    }
-    return pairs.length > 0 ? pairs.join('; ') : null;
+// ─── HELPER: Validate YouTube URL ──────────────────────────────
+function isValidYouTubeUrl(url) {
+    return !!extractVideoId(url);
 }
 
-ytdlAgent = setupCookieAgent();
-
-// ─── HELPER: Get ytdl options with cookies ─────────────────────
-function getYtdlOptions() {
-    const opts = {
-        requestOptions: {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            }
-        }
-    };
-
-    if (ytdlAgent) {
-        if (ytdlAgent.cookieHeader) {
-            // Fallback mode: add cookie as header
-            opts.requestOptions.headers['Cookie'] = ytdlAgent.cookieHeader;
-        } else {
-            // Proper agent mode
-            opts.agent = ytdlAgent;
-        }
+// ─── HELPER: Call RapidAPI with retry ──────────────────────────
+async function callRapidAPI(videoUrl, maxRetries = 3) {
+    if (!RAPIDAPI_KEY) {
+        throw new Error('Server API key not configured. Contact the admin.');
     }
 
-    return opts;
-}
-
-// ─── HELPER: Fetch info with retry ─────────────────────────────
-async function getInfoWithRetry(videoUrl, maxRetries = 3) {
     let lastError;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            console.log(`  ↳ Attempt ${attempt}/${maxRetries}...`);
-            const options = getYtdlOptions();
-            const info = await ytdl.getInfo(videoUrl, options);
-            console.log(`  ✅ Success on attempt ${attempt}`);
-            return info;
+            console.log(`  ↳ RapidAPI attempt ${attempt}/${maxRetries}...`);
+
+            const apiUrl = `https://${RAPIDAPI_HOST}/convert?url=${encodeURIComponent(videoUrl)}`;
+            const response = await fetch(apiUrl, {
+                method: 'GET',
+                headers: {
+                    'x-rapidapi-host': RAPIDAPI_HOST,
+                    'x-rapidapi-key': RAPIDAPI_KEY
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.log(`  ❌ API returned ${response.status}: ${errorText.substring(0, 200)}`);
+
+                // Don't retry on auth errors
+                if (response.status === 401 || response.status === 403) {
+                    throw new Error('API key is invalid or expired. Contact the admin.');
+                }
+                // Don't retry on rate limit (429) — wait won't help much
+                if (response.status === 429) {
+                    throw new Error('API rate limit reached. Please try again later.');
+                }
+
+                throw new Error(`API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log(`  ✅ RapidAPI success on attempt ${attempt}`);
+            return data;
+
         } catch (err) {
             lastError = err;
-            const msg = err.message || '';
-            console.log(`  ❌ Attempt ${attempt} failed: ${msg.substring(0, 150)}`);
+            console.log(`  ❌ Attempt ${attempt} failed: ${(err.message || '').substring(0, 150)}`);
 
-            // Don't retry if video genuinely doesn't exist
-            if (msg.includes('Video unavailable') || msg.includes('Private video') ||
-                msg.includes('removed') || msg.includes('not exist') ||
-                msg.includes('not a valid YouTube')) {
+            // Don't retry on permanent errors
+            if (err.message.includes('API key') || err.message.includes('rate limit')) {
                 throw err;
             }
 
@@ -160,7 +114,7 @@ async function getInfoWithRetry(videoUrl, maxRetries = 3) {
     throw lastError;
 }
 
-// Proxy endpoint to bypass 403 Forbidden on thumbnails
+// ─── Proxy endpoint to bypass 403 Forbidden on thumbnails ──────
 app.get('/api/thumbnail', async (req, res) => {
     let imageUrl = req.query.url;
     if (!imageUrl) return res.status(400).send('URL is required');
@@ -188,110 +142,56 @@ app.get('/api/thumbnail', async (req, res) => {
     }
 });
 
-// Main API: Get video info and formats
+// ─── Main API: Get video info and download link ────────────────
 app.get('/api/info', async (req, res) => {
     try {
         let videoUrl = req.query.url;
         if (!videoUrl) return res.status(400).json({ error: 'URL required' });
 
         // Validate URL looks like YouTube
-        if (!ytdl.validateURL(videoUrl)) {
+        if (!isValidYouTubeUrl(videoUrl)) {
             return res.status(400).json({ error: 'Invalid or unsupported URL. Currently supports YouTube links.' });
         }
 
-        console.log(`\n📥 Fetching info for ${videoUrl} ...`);
-        const info = await getInfoWithRetry(videoUrl);
-        const details = info.videoDetails;
+        console.log(`\n📥 Fetching info via RapidAPI for ${videoUrl} ...`);
+        const apiData = await callRapidAPI(videoUrl);
 
-        const title = details.title || 'Unknown Title';
-        const thumbnail = details.thumbnails?.length
-            ? details.thumbnails[details.thumbnails.length - 1].url
+        // Extract video ID for thumbnail
+        const videoId = extractVideoId(videoUrl);
+        const thumbnail = videoId
+            ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`
             : '';
-        const duration = details.lengthSeconds || 0;
-        const author = details.author?.name || '';
 
-        // Get downloadable formats
-        const allFormats = info.formats;
+        // Build the response in the format the frontend expects
+        const title = apiData.title || apiData.Title || 'YouTube Video';
+        const downloadUrl = apiData.link || apiData.Link || apiData.url || apiData.downloadUrl || '';
 
-        // Video + Audio combined formats
-        let videoFormats = allFormats
-            .filter(f => f.hasVideo && f.hasAudio && f.container === 'mp4')
-            .map(f => ({
-                itag: f.itag,
-                qualityLabel: f.qualityLabel || `${f.height}p`,
-                mimeType: f.mimeType,
-                hasVideo: true,
-                hasAudio: true,
-                contentLength: parseInt(f.contentLength) || 0,
-                height: f.height,
-                width: f.width,
-                url: f.url
-            }));
-
-        // Remove duplicates by height
-        const seen = new Set();
-        videoFormats = videoFormats.filter(f => {
-            const key = f.height || f.qualityLabel;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-
-        // Sort by height descending
-        videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
-
-        // Audio-only formats
-        let audioFormats = allFormats
-            .filter(f => f.hasAudio && !f.hasVideo)
-            .map(f => ({
-                itag: f.itag,
-                qualityLabel: `${f.audioBitrate || 128}kbps`,
-                mimeType: f.mimeType,
-                hasVideo: false,
-                hasAudio: true,
-                contentLength: parseInt(f.contentLength) || 0,
-                audioBitrate: f.audioBitrate,
-                url: f.url
-            }));
-
-        // Keep best audio only
-        audioFormats.sort((a, b) => (b.audioBitrate || 0) - (a.audioBitrate || 0));
-        audioFormats = audioFormats.slice(0, 2);
-
-        // If no combined formats, get video-only + best audio
-        if (videoFormats.length === 0) {
-            const videoOnly = allFormats
-                .filter(f => f.hasVideo && !f.hasAudio && f.container === 'mp4')
-                .map(f => ({
-                    itag: f.itag,
-                    qualityLabel: f.qualityLabel || `${f.height}p`,
-                    mimeType: f.mimeType,
-                    hasVideo: true,
-                    hasAudio: false,
-                    contentLength: parseInt(f.contentLength) || 0,
-                    height: f.height,
-                    width: f.width,
-                    url: f.url,
-                    videoOnly: true
-                }));
-
-            const seenVO = new Set();
-            videoFormats = videoOnly.filter(f => {
-                const key = f.height;
-                if (seenVO.has(key)) return false;
-                seenVO.add(key);
-                return true;
-            });
-            videoFormats.sort((a, b) => (b.height || 0) - (a.height || 0));
+        if (!downloadUrl) {
+            console.error('  ⚠️ API returned no download link:', JSON.stringify(apiData).substring(0, 500));
+            return res.status(500).json({ error: 'API returned no download link. The video may be restricted.' });
         }
 
-        const formats = [...videoFormats, ...audioFormats];
+        // Build formats array matching frontend expectations
+        const formats = [];
+
+        // Primary: best quality video
+        formats.push({
+            itag: 1,
+            qualityLabel: 'Best Quality',
+            mimeType: 'video/mp4',
+            hasVideo: true,
+            hasAudio: true,
+            contentLength: 0,
+            height: 1080,
+            width: 1920,
+            url: downloadUrl
+        });
 
         res.json({
             title,
             thumbnail,
-            duration,
-            author,
+            duration: apiData.duration || 0,
+            author: apiData.author || '',
             extractor: 'YouTube',
             formats
         });
@@ -300,14 +200,12 @@ app.get('/api/info', async (req, res) => {
         console.error('Error fetching info:', error.message);
         let errorMsg = 'Failed to process this link.';
 
-        if (error.message?.includes('Sign in to confirm')) {
-            errorMsg = 'YouTube requires sign-in verification. Server cookies may have expired — please refresh them.';
-        } else if (error.message?.includes('not available') || error.message?.includes('unavailable') || error.message?.includes('private')) {
-            errorMsg = 'This video is private, deleted, or unavailable.';
-        } else if (error.message?.includes('get a client identity') || error.message?.includes('innertube')) {
-            errorMsg = 'YouTube API temporarily blocked. Please try again in a few seconds.';
-        } else if (error.message?.includes('bot')) {
-            errorMsg = 'YouTube detected bot access. Server cookies may need to be refreshed.';
+        if (error.message?.includes('API key')) {
+            errorMsg = 'Server API key issue. Please contact the admin.';
+        } else if (error.message?.includes('rate limit')) {
+            errorMsg = 'Too many requests. Please try again in a few minutes.';
+        } else if (error.message?.includes('API error')) {
+            errorMsg = 'Download service temporarily unavailable. Please try again.';
         } else {
             errorMsg = error.message?.substring(0, 150) || errorMsg;
         }
@@ -316,26 +214,23 @@ app.get('/api/info', async (req, res) => {
     }
 });
 
-// Download endpoint: stream/proxy the video to the user
+// ─── Download endpoint (kept for compatibility) ────────────────
 app.get('/api/download', async (req, res) => {
     try {
         const videoUrl = req.query.url;
-        const itag = req.query.itag;
-
-        if (!videoUrl || !itag) {
-            return res.status(400).json({ error: 'URL and itag required' });
+        if (!videoUrl) {
+            return res.status(400).json({ error: 'URL required' });
         }
 
-        console.log(`\n⬇️  Download request: itag=${itag} for ${videoUrl}`);
-        const info = await getInfoWithRetry(videoUrl);
-        const format = info.formats.find(f => f.itag === parseInt(itag));
+        console.log(`\n⬇️  Download request for ${videoUrl}`);
+        const apiData = await callRapidAPI(videoUrl);
+        const downloadUrl = apiData.link || apiData.Link || apiData.url || apiData.downloadUrl || '';
 
-        if (!format || !format.url) {
-            return res.status(404).json({ error: 'Format not found.' });
+        if (!downloadUrl) {
+            return res.status(404).json({ error: 'No download link found.' });
         }
 
-        // Return the direct download URL
-        res.json({ downloadUrl: format.url });
+        res.json({ downloadUrl });
 
     } catch (error) {
         console.error('Error in /api/download:', error.message);
@@ -343,60 +238,39 @@ app.get('/api/download', async (req, res) => {
     }
 });
 
-// Health/Status endpoint
+// ─── Health/Status endpoint ────────────────────────────────────
 app.get('/api/status', (req, res) => {
     res.json({
         status: 'ok',
-        engine: '@distube/ytdl-core',
-        cookiesLoaded: !!ytdlAgent,
+        engine: 'RapidAPI (youtube-downloader-api-best-resolution)',
+        apiKeyLoaded: !!RAPIDAPI_KEY,
         uptime: Math.floor(process.uptime()) + 's'
     });
 });
 
-// Debug endpoint
+// ─── Debug endpoint ────────────────────────────────────────────
 app.get('/api/debug', async (req, res) => {
     let testResult = 'not tested';
     if (req.query.test) {
         try {
             const testUrl = req.query.url || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-            const info = await getInfoWithRetry(testUrl, 2);
-            testResult = 'SUCCESS: ' + info.videoDetails.title + ' (' + info.formats.length + ' formats)';
+            const data = await callRapidAPI(testUrl, 2);
+            const link = data.link || data.Link || data.url || 'no link';
+            testResult = `SUCCESS: ${data.title || 'got response'} — link: ${link.substring(0, 80)}...`;
         } catch (e) {
             testResult = 'FAIL: ' + (e.message || 'unknown error').substring(0, 300);
         }
     }
     res.json({
-        engine: '@distube/ytdl-core',
-        cookiesLoaded: !!ytdlAgent,
+        engine: 'RapidAPI',
+        apiKeyLoaded: !!RAPIDAPI_KEY,
         testResult
     });
 });
 
-// Endpoint to refresh cookies at runtime (POST with cookie text body)
-app.post('/api/refresh-cookies', express.text({ limit: '50kb' }), (req, res) => {
-    const secret = req.query.key;
-    const expectedKey = process.env.ADMIN_KEY || 'omniload-admin';
-
-    if (secret !== expectedKey) {
-        return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    try {
-        // Save to file
-        const cookiesFilePath = path.join(__dirname, 'cookies.txt');
-        fs.writeFileSync(cookiesFilePath, req.body, 'utf-8');
-
-        // Reload agent
-        ytdlAgent = setupCookieAgent();
-
-        res.json({ success: true, cookiesLoaded: !!ytdlAgent });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 app.listen(PORT, () => {
     console.log(`\n🚀 OmniLoad server running on http://localhost:${PORT}`);
-    console.log(`   Cookies: ${ytdlAgent ? '✅ Loaded' : '❌ Not loaded (YouTube will likely block requests)'}`);
+    console.log(`   Engine: RapidAPI YouTube Downloader`);
+    console.log(`   API Key: ${RAPIDAPI_KEY ? '✅ Loaded' : '❌ Not set (downloads will fail)'}`);
     console.log('');
 });
