@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const ytdl = require('@distube/ytdl-core');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,14 +11,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // ─── API CONFIGURATION ────────────────────────────────────────
-// Hybrid approach:
-// - YouTube: @distube/ytdl-core (direct streaming from server, no IP-lock)
-// - Other platforms: Auto Download All In One RapidAPI
+// Unified approach:
+// - All platforms (including YouTube): Auto Download All In One RapidAPI
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 const API_HOST = 'auto-download-all-in-one.p.rapidapi.com';
 
-console.log(`🔑 API Key loaded: ${RAPIDAPI_KEY ? 'Yes (' + RAPIDAPI_KEY.substring(0, 8) + '...)' : 'NOT SET'}`);
+console.log(`🔑 API Key loaded: ${RAPIDAPI_KEY ? 'Yes' : 'NOT SET'}`);
 
 // ─── HELPER: Detect platform from URL ─────────────────────────
 function detectPlatform(url) {
@@ -92,63 +91,7 @@ async function callDownloadAPI(url) {
     }
 }
 
-// ─── YOUTUBE: Get info using ytdl-core ────────────────────────
-async function getYouTubeInfo(url) {
-    console.log(`  🎬 Getting YouTube info via ytdl-core...`);
-    const info = await ytdl.getInfo(url);
-    const details = info.videoDetails;
-
-    // Get all formats with video
-    const videoFormats = ytdl.filterFormats(info.formats, 'videoandaudio');
-    const audioFormats = ytdl.filterFormats(info.formats, 'audioonly');
-
-    const formats = [];
-
-    // Add video+audio formats
-    videoFormats.forEach(f => {
-        formats.push({
-            quality: f.qualityLabel || `${f.height}p`,
-            url: '', // Don't expose URL, use stream endpoint
-            itag: f.itag,
-            extension: f.container || 'mp4',
-            type: 'video',
-            size: f.contentLength ? formatBytes(Number(f.contentLength)) : '',
-            audioAvailable: true,
-            hasAudio: true,
-            codec: f.codecs || ''
-        });
-    });
-
-    // Add audio-only formats (top 3)
-    audioFormats.slice(0, 3).forEach(f => {
-        formats.push({
-            quality: `${f.audioBitrate || 128}kbps`,
-            url: '',
-            itag: f.itag,
-            extension: f.container || 'm4a',
-            type: 'audio',
-            size: f.contentLength ? formatBytes(Number(f.contentLength)) : '',
-            audioAvailable: true,
-            hasAudio: true,
-            codec: f.audioCodec || ''
-        });
-    });
-
-    return {
-        success: true,
-        platform: 'YouTube',
-        title: details.title || 'Untitled',
-        author: details.author?.name || details.ownerChannelName || 'Unknown',
-        thumbnail: details.thumbnails?.length > 0
-            ? details.thumbnails[details.thumbnails.length - 1].url
-            : '',
-        duration: Number(details.lengthSeconds) || 0,
-        formats,
-        source: 'youtube',
-        url: url
-    };
-}
-
+// ─── HELPER: Formats bytes to MB/GB 등 ──────────────────────────
 function formatBytes(bytes) {
     if (!bytes || isNaN(bytes)) return '';
     const k = 1024;
@@ -169,14 +112,7 @@ app.get('/api/info', async (req, res) => {
     console.log(`\n🔍 INFO request: ${url.substring(0, 80)}... (${platform})`);
 
     try {
-        // YOUTUBE: Use ytdl-core directly
-        if (isYouTube(url)) {
-            const result = await getYouTubeInfo(url);
-            console.log(`  ✅ YouTube: ${result.formats.length} formats for "${result.title.substring(0, 50)}"`);
-            return res.json(result);
-        }
-
-        // OTHER PLATFORMS: Use RapidAPI
+        // ALL PLATFORMS (including YouTube): Use Auto Download All In One RapidAPI
         const apiData = await callDownloadAPI(url);
 
         const title = apiData.title || 'Unknown Title';
@@ -229,63 +165,8 @@ app.get('/api/info', async (req, res) => {
     }
 });
 
-// ─── API ENDPOINT: /api/stream ────────────────────────────────
-// Streams YouTube video/audio directly from server (bypasses IP-lock)
-app.get('/api/stream', async (req, res) => {
-    const url = req.query.url;
-    const itag = req.query.itag;
-    const filename = req.query.filename || 'download.mp4';
-
-    if (!url) {
-        return res.status(400).json({ error: 'Missing "url" parameter' });
-    }
-
-    console.log(`\n⬇️  STREAM request: ${url.substring(0, 80)}... itag=${itag}`);
-
-    try {
-        if (!isYouTube(url)) {
-            // For non-YouTube, redirect to the URL directly
-            return res.redirect(req.query.directUrl || url);
-        }
-
-        const options = {};
-        if (itag) {
-            options.quality = Number(itag);
-        } else {
-            options.quality = 'highest';
-            options.filter = 'videoandaudio';
-        }
-
-        // Set download headers
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.setHeader('Content-Type', 'application/octet-stream');
-
-        // Stream directly from YouTube through our server
-        const stream = ytdl(url, options);
-
-        stream.on('error', (err) => {
-            console.error(`  ❌ Stream error: ${err.message}`);
-            if (!res.headersSent) {
-                res.status(500).json({ error: `Stream failed: ${err.message}` });
-            }
-        });
-
-        stream.pipe(res);
-
-        stream.on('end', () => {
-            console.log(`  ✅ Stream complete: ${filename}`);
-        });
-
-    } catch (error) {
-        console.error(`  ❌ Stream error: ${error.message}`);
-        if (!res.headersSent) {
-            res.status(500).json({ error: error.message });
-        }
-    }
-});
-
 // ─── API ENDPOINT: /api/proxy ─────────────────────────────────
-// Proxies non-YouTube download URLs through our server
+// Proxies ALL download URLs (including YouTube) through our server
 app.get('/api/proxy', async (req, res) => {
     const downloadUrl = req.query.url;
     const filename = req.query.filename || 'download';
@@ -370,7 +251,7 @@ app.get('/api/thumbnail', async (req, res) => {
 app.get('/api/status', (req, res) => {
     res.json({
         status: 'ok',
-        engine: 'Hybrid: ytdl-core (YouTube) + RapidAPI (others)',
+        engine: 'Unified: Auto Download All In One (RapidAPI)',
         apiKeyLoaded: !!RAPIDAPI_KEY,
         supportedPlatforms: [
             'YouTube', 'Instagram', 'TikTok', 'Twitter/X',
@@ -387,8 +268,7 @@ app.get('/api/debug', (req, res) => {
         uptime: `${Math.floor(process.uptime())}s`,
         env: process.env.NODE_ENV || 'development',
         apiKeySet: !!RAPIDAPI_KEY,
-        apiHost: API_HOST,
-        ytdlVersion: '@distube/ytdl-core'
+        apiHost: API_HOST
     });
 });
 
@@ -400,9 +280,8 @@ app.get('*', (req, res) => {
 // ─── START SERVER ─────────────────────────────────────────────
 app.listen(PORT, () => {
     console.log(`\n🚀 OmniLoad server started on port ${PORT}`);
-    console.log(`🎬 YouTube: Direct streaming via @distube/ytdl-core`);
-    console.log(`📡 Other platforms: Auto Download All In One (RapidAPI)`);
+    console.log(`📡 All platforms handled universally via: Auto Download All In One (RapidAPI)`);
     if (!RAPIDAPI_KEY) {
-        console.log(`⚠️  WARNING: RAPIDAPI_KEY not set! Non-YouTube downloads won't work.`);
+        console.log(`⚠️  WARNING: RAPIDAPI_KEY not set! Downloads will fail.`);
     }
 });
