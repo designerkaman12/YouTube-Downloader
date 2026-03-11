@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const youtubedl = require('youtube-dl-exec');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,13 +12,25 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // ─── API CONFIGURATION ────────────────────────────────────────
-// Unified approach:
-// - All platforms (including YouTube): Auto Download All In One RapidAPI
+// Hybrid approach:
+// - YouTube: youtube-dl-exec (direct streaming from server, avoids ytdl-core 403s and IP Locks)
+// - Other platforms: Auto Download All In One RapidAPI
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 const API_HOST = 'auto-download-all-in-one.p.rapidapi.com';
 
+const cookiesPath = path.join(__dirname, 'cookies.txt');
+const hasCookiesFile = fs.existsSync(cookiesPath);
+const YT_COOKIES_ENV = process.env.YT_COOKIES || '';
+
 console.log(`🔑 API Key loaded: ${RAPIDAPI_KEY ? 'Yes' : 'NOT SET'}`);
+if (hasCookiesFile) {
+    console.log(`🍪 Found cookies.txt for YouTube Bot Bypass`);
+} else if (YT_COOKIES_ENV) {
+    console.log(`🍪 Found YT_COOKIES environment config for YouTube Bot Bypass`);
+} else {
+    console.log(`⚠️  No YouTube cookies provided. You may experience bot-detection issues.`);
+}
 
 // ─── HELPER: Detect platform from URL ─────────────────────────
 function detectPlatform(url) {
@@ -91,6 +104,59 @@ async function callDownloadAPI(url) {
     }
 }
 
+// ─── YOUTUBE: Get info using youtube-dl-exec ────────────────────────
+async function getYouTubeInfo(url) {
+    console.log(`  🎬 Getting YouTube info via yt-dlp...`);
+    
+    const ytDlpOptions = {
+        dumpJson: true,
+        noWarnings: true,
+        noCheckCertificate: true,
+    };
+
+    if (hasCookiesFile) {
+        ytDlpOptions.cookies = `"${cookiesPath}"`;
+    }
+
+    const info = await youtubedl(url, ytDlpOptions);
+
+    const formats = [];
+
+    info.formats.forEach(f => {
+        // Skip storyboards/thumbnails
+        if (f.protocol === 'mhtml' || f.format_id.startsWith('sb')) return;
+
+        // Simplify format sizes and features
+        const fileSize = f.filesize || f.filesize_approx || 0;
+        
+        formats.push({
+            quality: f.format_note || f.resolution || `${f.height}p` || 'audio',
+            url: '', // Don't expose URL, use stream endpoint
+            itag: f.format_id,
+            extension: f.ext || 'mp4',
+            type: f.vcodec !== 'none' ? 'video' : 'audio',
+            size: fileSize ? formatBytes(fileSize) : '',
+            audioAvailable: f.acodec !== 'none',
+            hasAudio: f.acodec !== 'none',
+            codec: (f.vcodec !== 'none' ? f.vcodec : f.acodec) || ''
+        });
+    });
+
+    const filteredFormats = formats.filter(f => f.type === 'video' || f.type === 'audio');
+    
+    return {
+        success: true,
+        platform: 'YouTube',
+        title: info.title || 'Untitled',
+        author: info.uploader || info.channel || 'Unknown',
+        thumbnail: info.thumbnail || '',
+        duration: info.duration || 0,
+        formats: filteredFormats,
+        source: 'youtube',
+        url: url
+    };
+}
+
 // ─── HELPER: Formats bytes to MB/GB 등 ──────────────────────────
 function formatBytes(bytes) {
     if (!bytes || isNaN(bytes)) return '';
@@ -112,7 +178,14 @@ app.get('/api/info', async (req, res) => {
     console.log(`\n🔍 INFO request: ${url.substring(0, 80)}... (${platform})`);
 
     try {
-        // ALL PLATFORMS (including YouTube): Use Auto Download All In One RapidAPI
+        // YOUTUBE: Use youtube-dl-exec
+        if (isYouTube(url)) {
+            const result = await getYouTubeInfo(url);
+            console.log(`  ✅ YouTube: ${result.formats.length} formats for "${result.title.substring(0, 50)}"`);
+            return res.json(result);
+        }
+
+        // OTHER PLATFORMS: Use RapidAPI
         const apiData = await callDownloadAPI(url);
 
         const title = apiData.title || 'Unknown Title';
@@ -165,8 +238,76 @@ app.get('/api/info', async (req, res) => {
     }
 });
 
+// ─── API ENDPOINT: /api/stream ────────────────────────────────
+// Streams YouTube video/audio directly from server (bypasses IP-lock)
+app.get('/api/stream', async (req, res) => {
+    const url = req.query.url;
+    const itag = req.query.itag;
+    const filename = req.query.filename || 'download.mp4';
+
+    if (!url) {
+        return res.status(400).json({ error: 'Missing "url" parameter' });
+    }
+
+    console.log(`\n⬇️  STREAM request: ${url.substring(0, 80)}... itag=${itag}`);
+
+    try {
+        if (!isYouTube(url)) {
+            // For non-YouTube, redirect to the URL directly
+            return res.redirect(req.query.directUrl || url);
+        }
+
+        let formatQuery = 'bestvideo+bestaudio/best';
+        if (itag) {
+            formatQuery = itag;
+        }
+
+        // Set download headers
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', 'application/octet-stream');
+
+        // Stream directly from YouTube through our server
+        const ytDlpOptions = {
+            format: formatQuery,
+            noWarnings: true,
+            noCheckCertificate: true,
+            o: '-' // Write to stdout
+        };
+
+        if (hasCookiesFile) {
+            ytDlpOptions.cookies = `"${cookiesPath}"`;
+        }
+
+        const subprocess = youtubedl.exec(url, ytDlpOptions);
+
+        subprocess.stdout.pipe(res);
+
+        subprocess.stderr.on('data', (err) => {
+            const msg = err.toString();
+            if (msg.toLowerCase().includes('error')) {
+                console.error(`  ❌ Stream error: ${msg}`);
+            }
+        });
+
+        subprocess.on('close', (code) => {
+            if (code === 0) {
+                 console.log(`  ✅ Stream complete: ${filename}`);
+            } else {
+                 console.log(`  ❌ Stream exited with code ${code}`);
+                 if (!res.headersSent) res.status(500).end();
+            }
+        });
+
+    } catch (error) {
+        console.error(`  ❌ Stream error: ${error.message}`);
+        if (!res.headersSent) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
 // ─── API ENDPOINT: /api/proxy ─────────────────────────────────
-// Proxies ALL download URLs (including YouTube) through our server
+// Proxies non-YouTube download URLs through our server
 app.get('/api/proxy', async (req, res) => {
     const downloadUrl = req.query.url;
     const filename = req.query.filename || 'download';
@@ -251,7 +392,7 @@ app.get('/api/thumbnail', async (req, res) => {
 app.get('/api/status', (req, res) => {
     res.json({
         status: 'ok',
-        engine: 'Unified: Auto Download All In One (RapidAPI)',
+        engine: 'Hybrid: youtube-dl-exec (YouTube) + RapidAPI (others)',
         apiKeyLoaded: !!RAPIDAPI_KEY,
         supportedPlatforms: [
             'YouTube', 'Instagram', 'TikTok', 'Twitter/X',
@@ -280,8 +421,12 @@ app.get('*', (req, res) => {
 // ─── START SERVER ─────────────────────────────────────────────
 app.listen(PORT, () => {
     console.log(`\n🚀 OmniLoad server started on port ${PORT}`);
-    console.log(`📡 All platforms handled universally via: Auto Download All In One (RapidAPI)`);
+    console.log(`🎬 YouTube: Direct streaming via youtube-dl-exec`);
+    console.log(`📡 Other platforms: Auto Download All In One (RapidAPI)`);
     if (!RAPIDAPI_KEY) {
-        console.log(`⚠️  WARNING: RAPIDAPI_KEY not set! Downloads will fail.`);
+        console.log(`⚠️  WARNING: RAPIDAPI_KEY not set! Non-YouTube downloads won't work.`);
+    }
+    if (!hasCookiesFile && !YT_COOKIES_ENV) {
+        console.log(`⚠️  WARNING: No YouTube cookies provided. You may get blocked by YouTube.`);
     }
 });
