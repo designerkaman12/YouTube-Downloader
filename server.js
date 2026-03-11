@@ -115,7 +115,7 @@ async function getYouTubeInfo(url) {
     };
 
     if (hasCookiesFile) {
-        ytDlpOptions.cookies = `"${cookiesPath}"`;
+        ytDlpOptions.cookies = cookiesPath;
     }
 
     const info = await youtubedl(url, ytDlpOptions);
@@ -275,7 +275,7 @@ app.get('/api/stream', async (req, res) => {
         };
 
         if (hasCookiesFile) {
-            ytDlpOptions.cookies = `"${cookiesPath}"`;
+            ytDlpOptions.cookies = cookiesPath;
         }
 
         const subprocess = youtubedl.exec(url, ytDlpOptions);
