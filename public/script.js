@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const platformBadge = document.getElementById('platformBadge');
         if (platformBadge) {
-            platformBadge.textContent = (data.extractor || 'Unknown').toUpperCase();
+            platformBadge.textContent = (data.platform || 'Unknown').toUpperCase();
             platformBadge.style.display = 'inline-block';
         }
 
@@ -144,108 +144,98 @@ document.addEventListener('DOMContentLoaded', () => {
             imageFormatsContainer.appendChild(thumbBtn);
         }
 
-        // Split formats
-        let videos = data.formats.filter(f => f.hasVideo);
-        let audios = data.formats.filter(f => !f.hasVideo && f.hasAudio);
+        // Split formats based on 'type' field from our API
+        let videos = data.formats.filter(f => f.type === 'video');
+        let audios = data.formats.filter(f => f.type === 'audio');
+
+        // If no explicit audio type found, check for formats that have audio but aren't video
+        if (audios.length === 0) {
+            audios = data.formats.filter(f => f.type !== 'video' && f.audioAvailable);
+        }
 
         // Video format buttons
         videos.forEach(format => {
-            const label = format.qualityLabel || 'Video';
-            const hasAudioTag = format.hasAudio ? ' (Video + Audio)' : ' (Video Only)';
-            const size = formatBytes(format.contentLength);
+            const label = format.quality || 'Video';
+            const audioTag = format.audioAvailable ? ' (Video + Audio)' : ' (Video Only)';
+            const ext = format.extension ? ` • ${format.extension.toUpperCase()}` : '';
+            const size = format.size || '';
+            const safeTitle = (data.title || 'video').replace(/[^a-zA-Z0-9_\- ]/g, '').substring(0, 50);
+            const filename = `${safeTitle}_${format.quality || 'video'}.${format.extension || 'mp4'}`;
 
-            const btn = document.createElement('button');
+            // YouTube: use /api/stream with itag (server-side streaming)
+            // Others: use /api/proxy with direct URL
+            let downloadUrl;
+            if (data.platform === 'YouTube' && format.itag) {
+                downloadUrl = `/api/stream?url=${encodeURIComponent(data.url)}&itag=${format.itag}&filename=${encodeURIComponent(filename)}`;
+            } else if (format.url) {
+                downloadUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
+            } else {
+                downloadUrl = '#';
+            }
+
+            const btn = document.createElement('a');
             btn.className = 'format-item';
             btn.style.width = '100%';
             btn.style.textAlign = 'left';
             btn.style.cursor = 'pointer';
+            btn.style.textDecoration = 'none';
+            btn.style.display = 'block';
+            btn.href = downloadUrl;
 
             btn.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                    <span class="quality">${label}${hasAudioTag}</span>
-                    <span class="size">${size}</span>
+                    <div style="text-align:left;">
+                        <div style="font-weight:600; font-size:1.05rem; margin-bottom: 2px;">${label}${audioTag}</div>
+                        <div style="font-size:0.82rem; color: var(--text-muted)">${ext} ${size ? '• ' + size : ''}</div>
+                    </div>
+                    <div style="background:var(--primary); padding:6px 14px; border-radius:8px; font-size:0.9rem; font-weight:600; display:flex; gap:6px; align-items:center; color:#fff; white-space:nowrap;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        Download
+                    </div>
                 </div>
             `;
-
-            // If format has direct URL, use it; otherwise call /api/download
-            if (format.url) {
-                btn.addEventListener('click', () => {
-                    window.open(format.url, '_blank');
-                });
-            } else {
-                btn.addEventListener('click', async () => {
-                    const qualitySpan = btn.querySelector('.quality');
-                    const originalLabel = qualitySpan.textContent;
-                    qualitySpan.textContent = '⏳ Preparing...';
-                    btn.disabled = true;
-
-                    try {
-                        const res = await fetch(`/api/download?url=${encodeURIComponent(originalUrl)}&itag=${format.itag}`);
-                        const data = await res.json();
-                        if (data.downloadUrl) {
-                            window.open(data.downloadUrl, '_blank');
-                        } else {
-                            throw new Error(data.error || 'Download failed');
-                        }
-                    } catch (err) {
-                        showError(err.message);
-                    } finally {
-                        setTimeout(() => {
-                            qualitySpan.textContent = originalLabel;
-                            btn.disabled = false;
-                        }, 2000);
-                    }
-                });
-            }
 
             videoFormatsContainer.appendChild(btn);
         });
 
         // Audio format buttons
         audios.forEach(format => {
-            const label = `🎵 Audio ${format.qualityLabel || '128kbps'}`;
-            const size = formatBytes(format.contentLength);
+            const label = `🎵 Audio ${format.quality || '128kbps'}`;
+            const ext = format.extension ? ` • ${format.extension.toUpperCase()}` : '';
+            const size = format.size || '';
+            const safeTitle = (data.title || 'audio').replace(/[^a-zA-Z0-9_\- ]/g, '').substring(0, 50);
+            const filename = `${safeTitle}_audio.${format.extension || 'm4a'}`;
 
-            const btn = document.createElement('button');
+            let downloadUrl;
+            if (data.platform === 'YouTube' && format.itag) {
+                downloadUrl = `/api/stream?url=${encodeURIComponent(data.url)}&itag=${format.itag}&filename=${encodeURIComponent(filename)}`;
+            } else if (format.url) {
+                downloadUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
+            } else {
+                downloadUrl = '#';
+            }
+
+            const btn = document.createElement('a');
             btn.className = 'format-item';
             btn.style.width = '100%';
             btn.style.textAlign = 'left';
             btn.style.cursor = 'pointer';
+            btn.style.textDecoration = 'none';
+            btn.style.display = 'block';
+            btn.href = downloadUrl;
 
             btn.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-                    <span class="quality">${label}</span>
-                    <span class="size">${size}</span>
+                    <div style="text-align:left;">
+                        <div style="font-weight:600; font-size:1.05rem; margin-bottom: 2px;">${label}</div>
+                        <div style="font-size:0.82rem; color: var(--text-muted)">${ext} ${size ? '• ' + size : ''}</div>
+                    </div>
+                    <div style="background:#10b981; padding:6px 14px; border-radius:8px; font-size:0.9rem; font-weight:600; display:flex; gap:6px; align-items:center; color:#fff; white-space:nowrap;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        Download
+                    </div>
                 </div>
             `;
-
-            if (format.url) {
-                btn.addEventListener('click', () => {
-                    window.open(format.url, '_blank');
-                });
-            } else {
-                btn.addEventListener('click', async () => {
-                    const qualitySpan = btn.querySelector('.quality');
-                    const originalLabel = qualitySpan.textContent;
-                    qualitySpan.textContent = '⏳ Preparing...';
-                    btn.disabled = true;
-
-                    try {
-                        const res = await fetch(`/api/download?url=${encodeURIComponent(originalUrl)}&itag=${format.itag}`);
-                        const data = await res.json();
-                        if (data.downloadUrl) {
-                            window.open(data.downloadUrl, '_blank');
-                        }
-                    } catch (err) {
-                        showError(err.message);
-                    } finally {
-                        setTimeout(() => {
-                            qualitySpan.textContent = originalLabel;
-                            btn.disabled = false;
-                        }, 2000);
-                    }
-                });
-            }
 
             audioFormatsContainer.appendChild(btn);
         });
