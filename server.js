@@ -327,9 +327,22 @@ app.get('/api/proxy', async (req, res) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 120000);
 
+        // Extract a referer from the download URL if possible
+        let referer = '';
+        try {
+            const parsed = new URL(downloadUrl);
+            referer = `${parsed.protocol}//${parsed.host}/`;
+        } catch (e) {
+            referer = downloadUrl;
+        }
+
         const response = await fetch(downloadUrl, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Referer': referer
             },
             signal: controller.signal
         });
