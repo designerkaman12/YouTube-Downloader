@@ -180,12 +180,17 @@ app.get('/api/info', async (req, res) => {
     try {
         // YOUTUBE: Use youtube-dl-exec
         if (isYouTube(url)) {
-            const result = await getYouTubeInfo(url);
-            console.log(`  ✅ YouTube: ${result.formats.length} formats for "${result.title.substring(0, 50)}"`);
-            return res.json(result);
+            try {
+                const result = await getYouTubeInfo(url);
+                console.log(`  ✅ YouTube: ${result.formats.length} formats for "${result.title.substring(0, 50)}"`);
+                return res.json(result);
+            } catch (ytError) {
+                console.warn(`  ⚠️ YouTube (yt-dlp) failed: ${ytError.message}. Falling back to RapidAPI...`);
+                // Fallthrough to RapidAPI below
+            }
         }
 
-        // OTHER PLATFORMS: Use RapidAPI
+        // OTHER PLATFORMS & YOUTUBE FALLBACK: Use RapidAPI
         const apiData = await callDownloadAPI(url);
 
         const title = apiData.title || 'Unknown Title';
