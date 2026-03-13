@@ -112,6 +112,7 @@ async function getYouTubeInfo(url) {
         dumpJson: true,
         noWarnings: true,
         noCheckCertificate: true,
+        noPlaylist: true, // Prevent processing entire playlists/mixes
     };
 
     if (hasCookiesFile) {
