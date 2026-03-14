@@ -10,7 +10,5 @@ services:
         value: 10000
       - key: NODE_ENV
         value: production
-      - key: YT_COOKIES
-        sync: false
-      - key: YT_PROXY
+      - key: COBALT_API_URL
         sync: false

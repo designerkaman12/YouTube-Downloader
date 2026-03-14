@@ -162,10 +162,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const safeTitle = (data.title || 'video').replace(/[^a-zA-Z0-9_\- ]/g, '').substring(0, 50);
             const filename = `${safeTitle}_${format.quality || 'video'}.${format.extension || 'mp4'}`;
 
-            // YouTube: use /api/stream with itag (server-side streaming)
+            // YouTube (Cobalt): use /api/stream with cobaltOptions
             // Others: use /api/proxy with direct URL
             let downloadUrl;
-            if (data.platform === 'YouTube' && format.itag) {
+            if (data.source === 'cobalt' && format.cobaltOptions) {
+                const opts = encodeURIComponent(JSON.stringify(format.cobaltOptions));
+                downloadUrl = `/api/stream?url=${encodeURIComponent(data.url)}&cobaltOptions=${opts}&filename=${encodeURIComponent(filename)}`;
+            } else if (data.platform === 'YouTube' && format.itag) {
                 downloadUrl = `/api/stream?url=${encodeURIComponent(data.url)}&itag=${format.itag}&filename=${encodeURIComponent(filename)}`;
             } else if (format.url) {
                 downloadUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
@@ -200,14 +203,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Audio format buttons
         audios.forEach(format => {
-            const label = `🎵 Audio ${format.quality || '128kbps'}`;
+            const label = `🎵 ${format.quality || 'Audio 128kbps'}`;
             const ext = format.extension ? ` • ${format.extension.toUpperCase()}` : '';
             const size = format.size || '';
             const safeTitle = (data.title || 'audio').replace(/[^a-zA-Z0-9_\- ]/g, '').substring(0, 50);
             const filename = `${safeTitle}_audio.${format.extension || 'm4a'}`;
 
             let downloadUrl;
-            if (data.platform === 'YouTube' && format.itag) {
+            if (data.source === 'cobalt' && format.cobaltOptions) {
+                const opts = encodeURIComponent(JSON.stringify(format.cobaltOptions));
+                downloadUrl = `/api/stream?url=${encodeURIComponent(data.url)}&cobaltOptions=${opts}&filename=${encodeURIComponent(filename)}`;
+            } else if (data.platform === 'YouTube' && format.itag) {
                 downloadUrl = `/api/stream?url=${encodeURIComponent(data.url)}&itag=${format.itag}&filename=${encodeURIComponent(filename)}`;
             } else if (format.url) {
                 downloadUrl = `/api/proxy?url=${encodeURIComponent(format.url)}&filename=${encodeURIComponent(filename)}`;
