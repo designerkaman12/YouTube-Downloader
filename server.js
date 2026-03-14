@@ -399,11 +399,52 @@ app.get('/api/stream', async (req, res) => {
             throw new Error('Could not get download URL from Cobalt');
         }
 
-        console.log(`  🔗 Got Cobalt tunnel URL, redirecting client...`);
+        console.log(`  🔗 Proxied stream headers sent, piping file to client...`);
 
-        // Redirect client directly to Cobalt's tunnel URL
-        // Cobalt tunnel handles the proxying, so no need to double-proxy
-        res.redirect(downloadUrl);
+        // We MUST proxy the Cobalt tunnel URL through our server. 
+        // Direct redirects fail because Cobalt's bot protection requires specific Origin/Accept headers
+        // that the browser does not send during an <a> tag download.
+        const streamController = new AbortController();
+        const streamTimeout = setTimeout(() => streamController.abort(), 600000); // 10 mins
+
+        const streamResponse = await fetch(downloadUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Origin': 'https://cobalt.tools',
+                'Referer': 'https://cobalt.tools/'
+            },
+            signal: streamController.signal
+        });
+
+        clearTimeout(streamTimeout);
+
+        if (!streamResponse.ok) {
+            throw new Error(`Tunnel rejected request: ${streamResponse.status}`);
+        }
+
+        const contentType = streamResponse.headers.get('content-type') || 'application/octet-stream';
+        const contentLength = streamResponse.headers.get('content-length');
+
+        res.setHeader('Content-Type', contentType);
+        if (contentLength) res.setHeader('Content-Length', contentLength);
+        
+        // Ensure browser downloads it as a file with the correct name
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        // Stream the response back to the client
+        const reader = streamResponse.body.getReader();
+        const pump = async () => {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                res.write(Buffer.from(value));
+            }
+            res.end();
+            console.log(`  ✅ Stream complete: ${filename}`);
+        };
+
+        await pump();
 
     } catch (error) {
         console.error(`  ❌ Stream error: ${error.message}`);
