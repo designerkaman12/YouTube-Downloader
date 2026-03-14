@@ -93,43 +93,69 @@ async function callDownloadAPI(url) {
     }
 }
 
-// ─── COBALT: Call Cobalt API ──────────────────────────────────
+// ─── COBALT API FAILOVER INSTANCES ────────────────────────────
+// The self-hosted instance is tried first, followed by public fallbacks in case of IP blocks.
+const COBALT_INSTANCES = [
+    COBALT_API_URL,                     // 1. User's self-hosted instance first
+    'https://api.cobalt.tools',         // 2. Official instance
+    'https://cobalt.duckery.co',        // 3. Fallback 1
+    'https://cobalt-api.kwiatekm.com'   // 4. Fallback 2
+].filter(Boolean).map(url => url.replace(/\/$/, ''));
+
+// ─── COBALT: Call Cobalt API with Fallback ────────────────────
 async function callCobaltAPI(url, options = {}) {
-    const cobaltUrl = COBALT_API_URL.replace(/\/$/, '');
-    console.log(`  🔷 Calling Cobalt API: POST ${cobaltUrl}/`);
+    const body = { url, ...options };
 
-    const body = {
-        url,
-        ...options
-    };
+    let lastError = null;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    // Try each instance until one succeeds
+    for (const cobaltUrl of COBALT_INSTANCES) {
+        console.log(`  🔷 Trying Cobalt API: POST ${cobaltUrl}/`);
+        
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000); // 15 sec timeout per instance
 
-    try {
-        const response = await fetch(`${cobaltUrl}/`, {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(body),
-            signal: controller.signal
-        });
+        try {
+            const response = await fetch(`${cobaltUrl}/`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Origin': 'https://cobalt.tools', // Required by some public instances
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                body: JSON.stringify(body),
+                signal: controller.signal
+            });
 
-        clearTimeout(timeout);
+            clearTimeout(timeout);
 
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(`Cobalt API error (${response.status}): ${text.substring(0, 200)}`);
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`Instance returned ${response.status}: ${text.substring(0, 100)}`);
+            }
+
+            const data = await response.json();
+            
+            // If it returns an error but the error is specifically a geo-block or IP ban,
+            // we should throw an error to trigger the next fallback.
+            if (data.status === 'error' && (data.error?.code === 'error.youtube.ip_ban' || data.text?.toLowerCase().includes('blocked'))) {
+                throw new Error(`Blocked by YouTube on this instance: ${data.error?.code || data.text}`);
+            }
+
+            console.log(`  ✅ Success with ${cobaltUrl}`);
+            return data;
+
+        } catch (err) {
+            clearTimeout(timeout);
+            console.warn(`  ⚠️ Failed (${cobaltUrl}): ${err.name === 'AbortError' ? 'Timeout' : err.message}`);
+            lastError = err;
+            // Continue to the next instance
         }
-
-        return await response.json();
-    } catch (err) {
-        clearTimeout(timeout);
-        if (err.name === 'AbortError') throw new Error('Cobalt API request timed out.');
-        throw err;
     }
+
+    // If we've exhausted all instances
+    throw new Error(`All Cobalt API instances failed. Last error: ${lastError?.message}`);
 }
 
 // ─── YOUTUBE: Get info using Cobalt API ────────────────────────
