@@ -159,7 +159,8 @@ async function getYouTubeInfo(url) {
     // We use a quick low-quality request just to validate
     const testResult = await callCobaltAPI(url, {
         videoQuality: '360',
-        youtubeVideoCodec: 'h264'
+        youtubeVideoCodec: 'h264',
+        alwaysProxy: true
     });
 
     // Extract title from the filename if available
@@ -198,7 +199,8 @@ async function getYouTubeInfo(url) {
             cobaltOptions: {
                 videoQuality: preset.videoQuality,
                 youtubeVideoCodec: 'h264',
-                downloadMode: 'auto'
+                downloadMode: 'auto',
+                alwaysProxy: true
             }
         });
     });
@@ -216,7 +218,8 @@ async function getYouTubeInfo(url) {
             cobaltOptions: {
                 downloadMode: 'audio',
                 audioFormat: preset.audioFormat,
-                audioBitrate: preset.audioBitrate
+                audioBitrate: preset.audioBitrate,
+                alwaysProxy: true
             }
         });
     });
@@ -349,6 +352,9 @@ app.get('/api/stream', async (req, res) => {
             }
         }
 
+        // Ensure alwaysProxy is set so Cobalt tunnels (avoids IP-locked redirects)
+        cobaltOptions.alwaysProxy = true;
+
         // Call Cobalt API to get the download URL
         console.log(`  🔷 Requesting from Cobalt with options:`, cobaltOptions);
         const cobaltResult = await callCobaltAPI(url, cobaltOptions);
@@ -367,46 +373,11 @@ app.get('/api/stream', async (req, res) => {
             throw new Error('Could not get download URL from Cobalt');
         }
 
-        console.log(`  🔗 Got Cobalt download URL, proxying to client...`);
+        console.log(`  🔗 Got Cobalt tunnel URL, redirecting client...`);
 
-        // Proxy the Cobalt download URL through our server
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 300000); // 5 min timeout for large files
-
-        const response = await fetch(downloadUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-            },
-            signal: controller.signal
-        });
-
-        clearTimeout(timeout);
-
-        if (!response.ok) {
-            throw new Error(`Download failed from Cobalt tunnel: ${response.status}`);
-        }
-
-        const contentType = response.headers.get('content-type') || 'application/octet-stream';
-        const contentLength = response.headers.get('content-length');
-
-        res.setHeader('Content-Type', contentType);
-        if (contentLength) res.setHeader('Content-Length', contentLength);
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-        // Stream the response
-        const reader = response.body.getReader();
-        const pump = async () => {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                res.write(Buffer.from(value));
-            }
-            res.end();
-        };
-
-        await pump();
-        console.log(`  ✅ Stream complete: ${filename}`);
+        // Redirect client directly to Cobalt's tunnel URL
+        // Cobalt tunnel handles the proxying, so no need to double-proxy
+        res.redirect(downloadUrl);
 
     } catch (error) {
         console.error(`  ❌ Stream error: ${error.message}`);
