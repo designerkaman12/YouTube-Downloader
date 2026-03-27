@@ -22,7 +22,7 @@ export default function Hero() {
           {/* Pill Badge */}
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-medium text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-            20+ Platforms Supported
+            12+ Platforms Supported
           </div>
 
           <h1 className="mb-6 text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
@@ -33,7 +33,7 @@ export default function Hero() {
 
           <p className="mx-auto mb-8 max-w-2xl text-base text-muted-foreground md:text-lg">
             The fastest free tool to download videos, audio, and media from
-            YouTube, Instagram, TikTok, Twitter, and 20+ platforms. No limits, no signup.
+            YouTube, Instagram, TikTok, Twitter, and all major platforms. No limits, no signup.
           </p>
 
           {/* Trust Badges */}

@@ -8,7 +8,7 @@ const platformLinks = [
   { name: 'Facebook Downloader', href: '/#tools' },
   { name: 'Pinterest Downloader', href: '/#tools' },
   { name: 'Reddit Video Saver', href: '/#tools' },
-  { name: 'Spotify Downloader', href: '/#tools' },
+  { name: 'LinkedIn Downloader', href: '/#tools' },
 ];
 
 const pageLinks = [
@@ -33,7 +33,7 @@ export default function Footer() {
               </span>
             </Link>
             <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
-              Free online video and audio downloader supporting 20+ platforms. Fast, unlimited, and no registration required.
+              Free online video and audio downloader supporting 12+ major platforms. Fast, unlimited, and no registration required.
             </p>
           </div>
           

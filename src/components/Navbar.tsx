@@ -1,18 +1,34 @@
 "use client";
 
 import Link from 'next/link';
-import { Download, Menu, X } from 'lucide-react';
+import { Download, Menu, X, Sun, Moon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
+
+    // Load saved theme
+    const saved = localStorage.getItem('omniload-theme') as 'dark' | 'light' | null;
+    if (saved) {
+      setTheme(saved);
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('omniload-theme', next);
+  };
 
   const navLinks = [
     { label: 'Platforms', href: '/#tools' },
@@ -45,14 +61,25 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Mobile Toggle */}
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-card hover:text-foreground md:hidden"
-          aria-label="Toggle menu"
-        >
-          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-all hover:bg-card hover:text-foreground"
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
+          {/* Mobile Toggle */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-card hover:text-foreground md:hidden"
+            aria-label="Toggle menu"
+          >
+            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu */}

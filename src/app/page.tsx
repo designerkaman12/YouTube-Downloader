@@ -79,7 +79,7 @@ function HowItWorks() {
 // ─── STATS SECTION ──────────────────────────────────────────
 function Stats() {
   const stats = [
-    { value: "20+", label: "Platforms Supported" },
+    { value: "12+", label: "Platforms Supported" },
     { value: "∞", label: "Unlimited Downloads" },
     { value: "8K", label: "Max Quality" },
     { value: "100%", label: "Free Forever" },
