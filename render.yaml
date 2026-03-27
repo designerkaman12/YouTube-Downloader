@@ -3,7 +3,8 @@ services:
     name: omniload
     runtime: node
     plan: free
-    buildCommand: npm install; npm run build
+    rootDir: omniload
+    buildCommand: npm install && npm run build
     startCommand: npx next start -p $PORT
     envVars:
       - key: PORT
