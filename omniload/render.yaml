@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: omniload-frontend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npx next start -p $PORT
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: COBALT_API_URL
+        sync: false
