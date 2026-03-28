@@ -3,6 +3,7 @@ services:
     name: omniload
     runtime: node
     plan: free
+    region: oregon
     rootDir: omniload
     buildCommand: npm install && npm run build
     startCommand: npx next start -p $PORT
@@ -11,6 +12,8 @@ services:
         value: 10000
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 20.11.0
       - key: RAPIDAPI_KEY
         sync: false
       - key: COBALT_API_URL
