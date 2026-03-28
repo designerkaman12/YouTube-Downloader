@@ -25,5 +25,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }));
 
-  return [...staticPages, ...toolPages];
+  const legalPages = ['privacy', 'terms', 'dmca'].map((page) => ({
+    url: `${siteUrl}/${page}`,
+    lastModified: new Date(),
+    changeFrequency: 'yearly' as const,
+    priority: 0.3,
+  }));
+
+  return [...staticPages, ...toolPages, ...legalPages];
 }
