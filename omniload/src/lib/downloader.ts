@@ -1,18 +1,15 @@
 /**
  * DOWNLOADER UTILITY LIBRARY
- * Handles platform detection, API calls (Cobalt & RapidAPI), and format processing.
+ * Handles platform detection, API calls (RapidAPI primary, Cobalt optional), and format processing.
  */
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 const API_HOST = 'auto-download-all-in-one.p.rapidapi.com';
 const COBALT_API_URL = process.env.COBALT_API_URL || '';
 
-// ─── COBALT API FAILOVER INSTANCES ────────────────────────────
+// ─── COBALT API INSTANCES (optional, only used if configured) ───
 const COBALT_INSTANCES = [
     COBALT_API_URL,
-    'https://api.cobalt.tools',
-    'https://cobalt.duckery.co',
-    'https://cobalt-api.kwiatekm.com'
 ].filter(Boolean).map(url => url.replace(/\/$/, ''));
 
 // ─── TYPES ───────────────────────────────────────────────────
@@ -57,15 +54,7 @@ export function detectPlatform(url: string): string {
         if (host.includes('reddit.com') || host.includes('redd.it')) return 'Reddit';
         if (host.includes('snapchat.com')) return 'Snapchat';
         if (host.includes('threads.net')) return 'Threads';
-        if (host.includes('bilibili.com') || host.includes('b23.tv')) return 'Bilibili';
-        if (host.includes('spotify.com')) return 'Spotify';
-        if (host.includes('soundcloud.com')) return 'SoundCloud';
         if (host.includes('linkedin.com')) return 'LinkedIn';
-        if (host.includes('twitch.tv')) return 'Twitch';
-        if (host.includes('tumblr.com')) return 'Tumblr';
-        if (host.includes('vk.com') || host.includes('vk.ru')) return 'VK';
-        if (host.includes('likee.video') || host.includes('likee.com')) return 'Likee';
-        if (host.includes('bandcamp.com')) return 'Bandcamp';
         return 'Other';
     } catch {
         return 'Unknown';
@@ -79,9 +68,13 @@ export function isYouTube(url: string): boolean {
 // ─── API CALLS ───────────────────────────────────────────────
 
 /**
- * Call Cobalt API with automatic failover to public instances if necessary
+ * Call Cobalt API (only if a custom instance URL is configured via env)
  */
 export async function callCobaltAPI(url: string, options: any = {}): Promise<any> {
+    if (COBALT_INSTANCES.length === 0) {
+        throw new Error('No Cobalt API instance configured.');
+    }
+
     const body = { url, ...options };
     let lastError: any = null;
 
@@ -89,7 +82,7 @@ export async function callCobaltAPI(url: string, options: any = {}): Promise<any
         console.log(`  🔷 Trying Cobalt API: POST ${cobaltUrl}/`);
         
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 12000); // Slightly faster timeout
+        const timeout = setTimeout(() => controller.abort(), 12000);
 
         try {
             const response = await fetch(`${cobaltUrl}/`, {
@@ -97,8 +90,6 @@ export async function callCobaltAPI(url: string, options: any = {}): Promise<any
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
-                    'Origin': 'https://cobalt.tools',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 },
                 body: JSON.stringify(body),
                 signal: controller.signal
@@ -113,8 +104,8 @@ export async function callCobaltAPI(url: string, options: any = {}): Promise<any
 
             const data = await response.json();
             
-            if (data.status === 'error' && (data.error?.code === 'error.youtube.ip_ban' || data.text?.toLowerCase().includes('blocked'))) {
-                throw new Error(`Blocked by YouTube on this instance: ${data.error?.code || data.text}`);
+            if (data.status === 'error') {
+                throw new Error(`Cobalt error: ${data.error?.code || 'unknown'}`);
             }
 
             console.log(`  ✅ Success with ${cobaltUrl}`);
@@ -127,21 +118,21 @@ export async function callCobaltAPI(url: string, options: any = {}): Promise<any
         }
     }
 
-    throw new Error(`All Cobalt API instances failed. Last error: ${lastError?.message}`);
+    throw new Error(`Cobalt API failed. ${lastError?.message}`);
 }
 
 /**
- * Call RapidAPI for non-YouTube platforms
+ * Call RapidAPI — primary download method for ALL platforms
  */
 export async function callRapidAPI(url: string): Promise<any> {
     if (!RAPIDAPI_KEY) {
-        throw new Error('RAPIDAPI_KEY is not set.');
+        throw new Error('RAPIDAPI_KEY is not configured. Please set it in environment variables.');
     }
 
     const apiUrl = `https://${API_HOST}/v1/social/autolink`;
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000); // Faster than 60s
+    const timeout = setTimeout(() => controller.abort(), 45000);
 
     try {
         const response = await fetch(apiUrl, {
@@ -157,7 +148,7 @@ export async function callRapidAPI(url: string): Promise<any> {
 
         clearTimeout(timeout);
 
-        if (response.status === 403) throw new Error('API subscription required.');
+        if (response.status === 403) throw new Error('API subscription required. Check your RapidAPI key.');
         if (response.status === 429) throw new Error('API rate limit reached. Please try again later.');
         if (!response.ok) {
             const text = await response.text();
@@ -174,25 +165,78 @@ export async function callRapidAPI(url: string): Promise<any> {
 
 // ─── DATA PROCESSING ─────────────────────────────────────────
 
-export async function getYouTubeInfo(url: string): Promise<DownloaderResult> {
+/**
+ * Get info for ANY platform via RapidAPI (primary method)
+ */
+export function processRapidAPIResult(apiData: any, platform: string, originalUrl: string): DownloaderResult {
+    const title = apiData.title || 'Unknown Title';
+    const author = apiData.author || apiData.source || platform;
+    const thumbnail = apiData.thumbnail || '';
+    const duration = apiData.duration || '';
+
+    const formats: DownloadFormat[] = [];
+
+    if (apiData.medias && Array.isArray(apiData.medias)) {
+        apiData.medias.forEach((media: any, i: number) => {
+            const isAudio = (media.type === 'audio') || 
+                           (media.extension === 'm4a') || 
+                           (media.extension === 'opus') || 
+                           (media.extension === 'mp3');
+            
+            formats.push({
+                quality: media.quality || `Option ${i + 1}`,
+                url: media.url,
+                extension: media.extension || 'mp4',
+                type: isAudio ? 'audio' : 'video',
+                size: media.formattedSize || media.size || '',
+                audioAvailable: media.audioAvailable !== undefined ? media.audioAvailable : true,
+                hasAudio: media.audioAvailable !== undefined ? media.audioAvailable : !isAudio,
+            });
+        });
+    } else if (apiData.url) {
+        formats.push({
+            quality: 'Default',
+            url: apiData.url,
+            extension: 'mp4',
+            type: 'video',
+            size: '',
+            audioAvailable: true,
+            hasAudio: true,
+        });
+    }
+
+    return {
+        success: true,
+        platform,
+        title,
+        author,
+        thumbnail,
+        duration,
+        formats,
+        source: 'rapidapi',
+        url: originalUrl
+    };
+}
+
+/**
+ * YouTube via Cobalt (only if custom Cobalt URL is configured)
+ */
+export async function getYouTubeInfoCobalt(url: string): Promise<DownloaderResult> {
     const videoPresets = [
-        { quality: '4320p (8K)', videoQuality: '4320', label: '8K Ultra' },
-        { quality: '2160p (4K)', videoQuality: '2160', label: '4K' },
-        { quality: '1440p (2K)', videoQuality: '1440', label: '2K' },
-        { quality: '1080p (Full HD)', videoQuality: '1080', label: '1080p' },
-        { quality: '720p (HD)', videoQuality: '720', label: '720p' },
-        { quality: '480p', videoQuality: '480', label: '480p' },
-        { quality: '360p', videoQuality: '360', label: '360p' },
+        { quality: '2160p (4K)', videoQuality: '2160' },
+        { quality: '1080p (Full HD)', videoQuality: '1080' },
+        { quality: '720p (HD)', videoQuality: '720' },
+        { quality: '480p', videoQuality: '480' },
+        { quality: '360p', videoQuality: '360' },
     ];
 
     const audioPresets = [
         { quality: 'MP3 320kbps', audioFormat: 'mp3', audioBitrate: '320', ext: 'mp3' },
         { quality: 'MP3 128kbps', audioFormat: 'mp3', audioBitrate: '128', ext: 'mp3' },
-        { quality: 'OGG (Best)', audioFormat: 'ogg', audioBitrate: '320', ext: 'ogg' },
-        { quality: 'WAV (Lossless)', audioFormat: 'wav', audioBitrate: '320', ext: 'wav' },
         { quality: 'OPUS (Best)', audioFormat: 'opus', audioBitrate: '320', ext: 'opus' },
     ];
 
+    // Test with a low quality request to get video metadata
     const testResult = await callCobaltAPI(url, {
         videoQuality: '360',
         youtubeVideoCodec: 'h264',
@@ -210,10 +254,10 @@ export async function getYouTubeInfo(url: string): Promise<DownloaderResult> {
     try {
         const urlObj = new URL(url);
         videoId = urlObj.searchParams.get('v') || urlObj.pathname.split('/').pop() || '';
-    } catch (e) {}
+    } catch {}
 
     if (videoId) {
-        thumbnail = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+        thumbnail = `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`;
     }
 
     const formats: DownloadFormat[] = [];

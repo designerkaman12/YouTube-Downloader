@@ -1,48 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isYouTube, callCobaltAPI } from '@/lib/downloader';
+import { callCobaltAPI } from '@/lib/downloader';
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const url = searchParams.get('url');
     const filename = searchParams.get('filename') || 'download.mp4';
     const cobaltOptionsRaw = searchParams.get('cobaltOptions');
-    const directUrl = searchParams.get('directUrl');
 
     if (!url) {
         return NextResponse.json({ error: 'Missing "url" parameter' }, { status: 400 });
     }
 
     try {
-        if (!isYouTube(url)) {
-            // For non-YouTube, redirect to the direct URL if available, else the original URL
-            return NextResponse.redirect(directUrl || url);
-        }
+        let downloadUrl = '';
 
-        // Parse Cobalt options
-        let cobaltOptions: any = {};
-        if (cobaltOptionsRaw) {
+        // If cobalt options are provided, use Cobalt API to get the download URL
+        if (cobaltOptionsRaw && process.env.COBALT_API_URL) {
+            let cobaltOptions: any = {};
             try {
                 cobaltOptions = JSON.parse(decodeURIComponent(cobaltOptionsRaw));
-            } catch (e) {}
-        }
+            } catch {}
 
-        // Ensure alwaysProxy is set
-        cobaltOptions.alwaysProxy = true;
+            cobaltOptions.alwaysProxy = true;
 
-        // Call Cobalt API to get the tunnel URL
-        const cobaltResult = await callCobaltAPI(url, cobaltOptions);
+            const cobaltResult = await callCobaltAPI(url, cobaltOptions);
 
-        let downloadUrl = '';
-        if (cobaltResult.status === 'tunnel' || cobaltResult.status === 'redirect') {
-            downloadUrl = cobaltResult.url;
-        } else if (cobaltResult.status === 'picker' && cobaltResult.picker?.[0]?.url) {
-            downloadUrl = cobaltResult.picker[0].url;
-        } else if (cobaltResult.status === 'error') {
-            throw new Error(`Cobalt error: ${cobaltResult.error?.code || 'unknown'}`);
-        }
+            if (cobaltResult.status === 'tunnel' || cobaltResult.status === 'redirect') {
+                downloadUrl = cobaltResult.url;
+            } else if (cobaltResult.status === 'picker' && cobaltResult.picker?.[0]?.url) {
+                downloadUrl = cobaltResult.picker[0].url;
+            } else if (cobaltResult.status === 'error') {
+                throw new Error(`Cobalt error: ${cobaltResult.error?.code || 'unknown'}`);
+            }
 
-        if (!downloadUrl) {
-            throw new Error('Could not get download URL from Cobalt');
+            if (!downloadUrl) {
+                throw new Error('Could not get download URL from Cobalt');
+            }
+        } else {
+            // For RapidAPI results, the URL itself is the direct download link
+            downloadUrl = url;
         }
 
         console.log(`  🔗 Proxied stream: ${filename}`);
@@ -51,14 +47,12 @@ export async function GET(req: NextRequest) {
         const streamResponse = await fetch(downloadUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Origin': 'https://cobalt.tools',
-                'Referer': 'https://cobalt.tools/'
+                'Accept': '*/*',
             }
         });
 
         if (!streamResponse.ok) {
-            throw new Error(`Tunnel rejected request: ${streamResponse.status}`);
+            throw new Error(`Download source rejected request: ${streamResponse.status}`);
         }
 
         // Forward headers
