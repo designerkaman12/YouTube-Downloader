@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { detectPlatform, isYouTube, getYouTubeInfoCobalt, callRapidAPI, processRapidAPIResult } from '@/lib/downloader';
+import { detectPlatform, isYouTube, callRapidAPI, processRapidAPIResult } from '@/lib/downloader';
 import { checkRateLimit, getClientIP, isAllowedSourceUrl } from '@/lib/security';
 
 export async function GET(req: NextRequest) {
@@ -29,6 +29,8 @@ export async function GET(req: NextRequest) {
         // YOUTUBE: Try Cobalt first (only if configured), then RapidAPI
         if (isYouTube(url) && process.env.COBALT_API_URL) {
             try {
+                // Dynamic import to avoid build-time resolution issues
+                const { getYouTubeInfoCobalt } = await import('@/lib/downloader');
                 const result = await getYouTubeInfoCobalt(url);
                 return NextResponse.json(result, {
                     headers: { 'Cache-Control': 'private, max-age=300' } // Cache 5 min
