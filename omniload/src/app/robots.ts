@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next';
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://omniload.onrender.com';
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
@@ -9,6 +11,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/api/'],
       },
     ],
-    sitemap: 'https://omniload.onrender.com/sitemap.xml',
+    sitemap: `${siteUrl}/sitemap.xml`,
   };
 }

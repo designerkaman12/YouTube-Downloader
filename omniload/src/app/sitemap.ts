@@ -1,36 +1,32 @@
 import type { MetadataRoute } from 'next';
 
-const siteUrl = 'https://omniload.onrender.com';
-
-const platforms = [
-  'youtube', 'instagram', 'tiktok', 'twitter',
-  'facebook', 'pinterest', 'reddit', 'snapchat',
-  'linkedin', 'threads', 'vimeo', 'dailymotion',
-];
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://omniload.onrender.com';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const staticPages = [
+  return [
     {
       url: siteUrl,
       lastModified: new Date(),
-      changeFrequency: 'daily' as const,
+      changeFrequency: 'daily',
       priority: 1,
     },
+    {
+      url: `${siteUrl}/privacy`,
+      lastModified: new Date(),
+      changeFrequency: 'yearly',
+      priority: 0.3,
+    },
+    {
+      url: `${siteUrl}/terms`,
+      lastModified: new Date(),
+      changeFrequency: 'yearly',
+      priority: 0.3,
+    },
+    {
+      url: `${siteUrl}/dmca`,
+      lastModified: new Date(),
+      changeFrequency: 'yearly',
+      priority: 0.3,
+    },
   ];
-
-  const toolPages = platforms.map((platform) => ({
-    url: `${siteUrl}/tools/${platform}-downloader`,
-    lastModified: new Date(),
-    changeFrequency: 'weekly' as const,
-    priority: 0.8,
-  }));
-
-  const legalPages = ['privacy', 'terms', 'dmca'].map((page) => ({
-    url: `${siteUrl}/${page}`,
-    lastModified: new Date(),
-    changeFrequency: 'yearly' as const,
-    priority: 0.3,
-  }));
-
-  return [...staticPages, ...toolPages, ...legalPages];
 }

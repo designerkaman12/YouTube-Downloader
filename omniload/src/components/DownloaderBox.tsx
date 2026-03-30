@@ -115,7 +115,7 @@ export default function DownloaderBox() {
             <div className="flex-1">
               <p className="text-sm font-medium text-red-400">{error}</p>
               <button
-                onClick={handleDownloadRequest as any}
+                onClick={() => { setError(null); handleDownloadRequest({ preventDefault: () => {} } as any); }}
                 className="mt-2 text-xs font-medium text-red-400/80 underline underline-offset-2 transition-colors hover:text-red-300"
               >
                 Try again
@@ -220,6 +220,7 @@ export default function DownloaderBox() {
                   key={idx}
                   href={getDownloadUrl(format)}
                   id={`download-format-${idx}`}
+                  rel="noopener noreferrer"
                   className="group flex items-center justify-between rounded-xl border border-border bg-surface/50 p-3.5 transition-all hover:border-primary/40 hover:bg-surface active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">

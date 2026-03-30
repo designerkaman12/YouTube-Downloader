@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { detectPlatform, isYouTube, getYouTubeInfoCobalt, callRapidAPI, processRapidAPIResult } from '@/lib/downloader';
+import { checkRateLimit, getClientIP, isAllowedSourceUrl } from '@/lib/security';
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -7,6 +8,18 @@ export async function GET(req: NextRequest) {
 
     if (!url) {
         return NextResponse.json({ error: 'Missing "url" parameter' }, { status: 400 });
+    }
+
+    // Rate limit: 20 requests per minute per IP
+    const ip = getClientIP(req);
+    const rateLimitError = checkRateLimit(ip, 'info', 20, 60000);
+    if (rateLimitError) {
+        return NextResponse.json({ error: rateLimitError }, { status: 429 });
+    }
+
+    // SSRF protection: only allow known platform URLs
+    if (!isAllowedSourceUrl(url)) {
+        return NextResponse.json({ error: 'Unsupported platform. Please use a link from YouTube, Instagram, TikTok, Twitter, or other supported platforms.' }, { status: 400 });
     }
 
     const platform = detectPlatform(url);
@@ -17,7 +30,9 @@ export async function GET(req: NextRequest) {
         if (isYouTube(url) && process.env.COBALT_API_URL) {
             try {
                 const result = await getYouTubeInfoCobalt(url);
-                return NextResponse.json(result);
+                return NextResponse.json(result, {
+                    headers: { 'Cache-Control': 'private, max-age=300' } // Cache 5 min
+                });
             } catch (ytError: any) {
                 console.warn(`  ⚠️ YouTube (Cobalt) failed: ${ytError.message}. Using RapidAPI...`);
             }
@@ -27,7 +42,9 @@ export async function GET(req: NextRequest) {
         console.log(`  📡 Using RapidAPI for ${platform}...`);
         const apiData = await callRapidAPI(url);
         const result = processRapidAPIResult(apiData, platform, url);
-        return NextResponse.json(result);
+        return NextResponse.json(result, {
+            headers: { 'Cache-Control': 'private, max-age=300' } // Cache 5 min
+        });
 
     } catch (error: any) {
         console.error(`  ❌ Info Error: ${error.message}`);

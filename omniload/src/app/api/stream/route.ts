@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callCobaltAPI } from '@/lib/downloader';
+import { checkRateLimit, getClientIP, isAllowedSourceUrl } from '@/lib/security';
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -9,6 +10,18 @@ export async function GET(req: NextRequest) {
 
     if (!url) {
         return NextResponse.json({ error: 'Missing "url" parameter' }, { status: 400 });
+    }
+
+    // Rate limit: 15 requests per minute per IP (streaming is expensive)
+    const ip = getClientIP(req);
+    const rateLimitError = checkRateLimit(ip, 'stream', 15, 60000);
+    if (rateLimitError) {
+        return NextResponse.json({ error: rateLimitError }, { status: 429 });
+    }
+
+    // SSRF protection
+    if (!isAllowedSourceUrl(url)) {
+        return NextResponse.json({ error: 'URL not allowed.' }, { status: 403 });
     }
 
     try {

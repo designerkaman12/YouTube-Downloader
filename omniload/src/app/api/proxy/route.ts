@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, getClientIP, isAllowedUrl } from '@/lib/security';
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -7,6 +8,18 @@ export async function GET(req: NextRequest) {
 
     if (!downloadUrl) {
         return NextResponse.json({ error: 'Missing "url" parameter' }, { status: 400 });
+    }
+
+    // Rate limit: 30 requests per minute per IP
+    const ip = getClientIP(req);
+    const rateLimitError = checkRateLimit(ip, 'proxy', 30, 60000);
+    if (rateLimitError) {
+        return NextResponse.json({ error: rateLimitError }, { status: 429 });
+    }
+
+    // SSRF protection: only allow known media platform URLs
+    if (!isAllowedUrl(downloadUrl)) {
+        return NextResponse.json({ error: 'Download URL not allowed. Only supported platform CDNs are accepted.' }, { status: 403 });
     }
 
     try {
