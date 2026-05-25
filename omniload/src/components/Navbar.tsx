@@ -1,25 +1,26 @@
 "use client";
 
 import Link from 'next/link';
-import { Download, Menu, X, Sun, Moon } from 'lucide-react';
+import { Download, Menu, X, Sun, Moon, Sparkles } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('omniload-theme') as 'dark' | 'light' | null;
+      if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+        return saved;
+      }
+    }
+    return 'dark';
+  });
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
-
-    // Load saved theme
-    const saved = localStorage.getItem('omniload-theme') as 'dark' | 'light' | null;
-    if (saved) {
-      setTheme(saved);
-      document.documentElement.setAttribute('data-theme', saved);
-    }
-
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -31,7 +32,7 @@ export default function Navbar() {
   };
 
   const navLinks = [
-    { label: 'Platforms', href: '/#tools' },
+    { label: 'Tools', href: '/#tools' },
     { label: 'How It Works', href: '/#how-it-works' },
     { label: 'FAQ', href: '/#faq' },
   ];
@@ -59,6 +60,13 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+          <Link
+            href="/premium"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-400 transition-colors hover:text-amber-300"
+          >
+            <Sparkles size={14} />
+            Premium
+          </Link>
         </div>
 
         <div className="flex items-center gap-2">
@@ -95,6 +103,14 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+          <Link
+            href="/premium"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-1.5 rounded-lg px-4 py-3 text-sm font-semibold text-amber-400 transition-colors hover:bg-card hover:text-amber-300"
+          >
+            <Sparkles size={14} />
+            Premium
+          </Link>
         </div>
       )}
     </nav>

@@ -12,9 +12,9 @@ export async function GET(req: NextRequest) {
 
     // Rate limit: 20 requests per minute per IP
     const ip = getClientIP(req);
-    const rateLimitError = checkRateLimit(ip, 'info', 20, 60000);
-    if (rateLimitError) {
-        return NextResponse.json({ error: rateLimitError }, { status: 429 });
+    const rateLimitResult = checkRateLimit(ip, 'info', 20, 60000);
+    if (!rateLimitResult.allowed) {
+        return NextResponse.json({ error: rateLimitResult.error }, { status: 429 });
     }
 
     // SSRF protection: only allow known platform URLs
@@ -35,8 +35,8 @@ export async function GET(req: NextRequest) {
                 return NextResponse.json(result, {
                     headers: { 'Cache-Control': 'private, max-age=300' } // Cache 5 min
                 });
-            } catch (ytError: any) {
-                console.warn(`  ⚠️ YouTube (Cobalt) failed: ${ytError.message}. Using RapidAPI...`);
+            } catch (ytError: unknown) {
+                console.warn(`  ⚠️ YouTube (Cobalt) failed: ${ytError instanceof Error ? ytError.message : 'Unknown error'}. Using RapidAPI...`);
             }
         }
 
@@ -48,8 +48,9 @@ export async function GET(req: NextRequest) {
             headers: { 'Cache-Control': 'private, max-age=300' } // Cache 5 min
         });
 
-    } catch (error: any) {
-        console.error(`  ❌ Info Error: ${error.message}`);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`  ❌ Info Error: ${message}`);
+        return NextResponse.json({ error: 'Failed to fetch media info. Please try again.' }, { status: 500 });
     }
 }

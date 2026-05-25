@@ -1,18 +1,20 @@
 import React from 'react';
+import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 
 const tools = [
-  { name: 'YouTube', desc: 'Videos, Shorts & MP3', slug: 'youtube', color: '#FF0000', popular: true },
-  { name: 'Instagram', desc: 'Reels, Posts & Stories', slug: 'instagram', color: '#E1306C', popular: true },
-  { name: 'TikTok', desc: 'Videos without watermark', slug: 'tiktok', color: '#00F2EA', popular: true },
-  { name: 'Twitter / X', desc: 'Videos & GIFs from tweets', slug: 'twitter', color: '#1DA1F2', popular: true },
-  { name: 'Facebook', desc: 'Watch videos & Reels', slug: 'facebook', color: '#1877F2', popular: true },
-  { name: 'Pinterest', desc: 'Pins & video pins', slug: 'pinterest', color: '#E60023' },
-  { name: 'Reddit', desc: 'Videos & GIFs from posts', slug: 'reddit', color: '#FF4500' },
-  { name: 'Snapchat', desc: 'Stories & Spotlights', slug: 'snapchat', color: '#FFFC00' },
-  { name: 'LinkedIn', desc: 'Video posts & articles', slug: 'linkedin', color: '#0A66C2' },
-  { name: 'Threads', desc: 'Videos & media posts', slug: 'threads', color: '#FFFFFF' },
-  { name: 'Vimeo', desc: 'High-quality video', slug: 'vimeo', color: '#1AB7EA' },
-  { name: 'Dailymotion', desc: 'HD video downloads', slug: 'dailymotion', color: '#0066DC' },
+  { name: 'YouTube', desc: 'Process YouTube video links', slug: 'youtube', color: '#FF0000', popular: true, href: '/youtube-video-downloader' },
+  { name: 'Instagram', desc: 'Save Instagram media links', slug: 'instagram', color: '#E1306C', popular: true, href: '/instagram-video-downloader' },
+  { name: 'TikTok', desc: 'Process TikTok video links', slug: 'tiktok', color: '#00F2EA', popular: true, href: '/tiktok-video-downloader' },
+  { name: 'Twitter / X', desc: 'Save Twitter/X media links', slug: 'twitter', color: '#1DA1F2', popular: true, href: '/twitter-video-downloader' },
+  { name: 'Facebook', desc: 'Process Facebook video links', slug: 'facebook', color: '#1877F2', popular: true, href: '/facebook-video-downloader' },
+  { name: 'Pinterest', desc: 'Save Pinterest media links', slug: 'pinterest', color: '#E60023', href: '/#tools' },
+  { name: 'Reddit', desc: 'Process Reddit media links', slug: 'reddit', color: '#FF4500', href: '/#tools' },
+  { name: 'Snapchat', desc: 'Save Snapchat media links', slug: 'snapchat', color: '#FFFC00', href: '/#tools' },
+  { name: 'LinkedIn', desc: 'Process LinkedIn video links', slug: 'linkedin', color: '#0A66C2', href: '/#tools' },
+  { name: 'Threads', desc: 'Save Threads media links', slug: 'threads', color: '#FFFFFF', href: '/#tools' },
+  { name: 'Vimeo', desc: 'Process Vimeo video links', slug: 'vimeo', color: '#1AB7EA', href: '/#tools' },
+  { name: 'Dailymotion', desc: 'Process Dailymotion links', slug: 'dailymotion', color: '#0066DC', href: '/#tools' },
 ];
 
 function PlatformIcon({ slug, color }: { slug: string; color: string }) {
@@ -90,6 +92,8 @@ function PlatformIcon({ slug, color }: { slug: string; color: string }) {
   );
 }
 
+const hasDedicatedPage = ['youtube', 'instagram', 'tiktok', 'twitter', 'facebook'];
+
 export default function ToolGrid() {
   return (
     <section id="tools" className="py-20 sm:py-28">
@@ -99,30 +103,52 @@ export default function ToolGrid() {
             All Your <span className="gradient-text">Platforms</span>, One Tool
           </h2>
           <p className="mx-auto max-w-xl text-base text-muted-foreground">
-            Download videos, audio, and media from the most popular platforms. Paste any link and go.
+            Process media links from the most popular platforms. Paste any link and go.
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4">
-          {tools.map((tool) => (
-            <div
-              key={tool.slug}
-              className="card-shine group relative cursor-default rounded-2xl border border-border bg-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-card-hover hover:shadow-xl hover:shadow-black/10"
-            >
-              {tool.popular && (
-                <span className="absolute right-2.5 top-2.5 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
-                  Popular
-                </span>
-              )}
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl transition-transform group-hover:scale-110" style={{ backgroundColor: `${tool.color}10` }}>
-                <PlatformIcon slug={tool.slug} color={tool.color} />
+          {tools.map((tool) => {
+            const hasPage = hasDedicatedPage.includes(tool.slug);
+            const CardContent = (
+              <>
+                {tool.popular && (
+                  <span className="absolute right-2.5 top-2.5 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
+                    Popular
+                  </span>
+                )}
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl transition-transform group-hover:scale-110" style={{ backgroundColor: `${tool.color}10` }}>
+                  <PlatformIcon slug={tool.slug} color={tool.color} />
+                </div>
+                <h3 className="text-sm font-bold text-foreground">{tool.name}</h3>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  {tool.desc}
+                </p>
+                {hasPage && (
+                  <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                    Learn More <ArrowRight size={10} />
+                  </span>
+                )}
+              </>
+            );
+
+            return hasPage ? (
+              <Link
+                key={tool.slug}
+                href={tool.href}
+                className="card-shine group relative rounded-2xl border border-border bg-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-card-hover hover:shadow-xl hover:shadow-black/10"
+              >
+                {CardContent}
+              </Link>
+            ) : (
+              <div
+                key={tool.slug}
+                className="card-shine group relative cursor-default rounded-2xl border border-border bg-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-card-hover hover:shadow-xl hover:shadow-black/10"
+              >
+                {CardContent}
               </div>
-              <h3 className="text-sm font-bold text-foreground">{tool.name}</h3>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                {tool.desc}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

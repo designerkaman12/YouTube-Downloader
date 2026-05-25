@@ -1,10 +1,10 @@
 import DownloaderBox from "@/components/DownloaderBox";
 
 const trustBadges = [
-  "100% Free",
-  "No Registration",
-  "Unlimited Downloads",
-  "All Platforms",
+  "No Signup Required",
+  "Fast Link Processing",
+  "Popular Platforms",
+  "Multiple Output Options",
 ];
 
 export default function Hero() {
@@ -22,18 +22,18 @@ export default function Hero() {
           {/* Pill Badge */}
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-medium text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-            12+ Platforms Supported
+            Fast Media Utility
           </div>
 
           <h1 className="mb-6 text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-            Download Anything{" "}
+            Save Public Media Links{" "}
             <br className="hidden sm:block" />
-            from <span className="gradient-text">Anywhere.</span>
+            <span className="gradient-text">Faster.</span>
           </h1>
 
           <p className="mx-auto mb-8 max-w-2xl text-base text-muted-foreground md:text-lg">
-            The fastest free tool to download videos, audio, and media from
-            YouTube, Instagram, TikTok, Twitter, and all major platforms. No limits, no signup.
+            OmniLoad helps you process publicly available media links for personal, permitted,
+            and lawful use. Availability depends on platform rules and content permissions.
           </p>
 
           {/* Trust Badges */}

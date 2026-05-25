@@ -3,17 +3,64 @@
 import { useState } from 'react';
 import { Search, Loader2, Download, Play, Video, Music } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAnalytics } from '@/hooks/useAnalytics';
+
+interface DownloadFormatItem {
+  quality: string;
+  url?: string;
+  extension?: string;
+  type: 'video' | 'audio' | 'other';
+  size?: string;
+  hasAudio?: boolean;
+  cobaltOptions?: Record<string, unknown>;
+  itag?: string;
+}
+
+interface DownloadResult {
+  success: boolean;
+  platform: string;
+  title: string;
+  author: string;
+  thumbnail: string;
+  duration: number | string;
+  formats: DownloadFormatItem[];
+  source: string;
+  url: string;
+  error?: string;
+}
+
+// Detect platform from URL for analytics (never log the actual URL)
+function detectPlatform(url: string): string {
+  const u = url.toLowerCase();
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+  if (u.includes('instagram.com')) return 'instagram';
+  if (u.includes('tiktok.com')) return 'tiktok';
+  if (u.includes('twitter.com') || u.includes('x.com')) return 'twitter';
+  if (u.includes('facebook.com') || u.includes('fb.watch')) return 'facebook';
+  if (u.includes('pinterest.com')) return 'pinterest';
+  if (u.includes('reddit.com')) return 'reddit';
+  if (u.includes('snapchat.com')) return 'snapchat';
+  if (u.includes('linkedin.com')) return 'linkedin';
+  if (u.includes('threads.net')) return 'threads';
+  if (u.includes('vimeo.com')) return 'vimeo';
+  if (u.includes('dailymotion.com')) return 'dailymotion';
+  return 'other';
+}
 
 export default function DownloaderBox() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<DownloadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'video' | 'audio'>('all');
+  const { trackEvent } = useAnalytics();
 
   const handleDownloadRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) return;
+
+    const platform = detectPlatform(url);
+    trackEvent('url_submitted', { platform });
 
     setIsLoading(true);
     setError(null);
@@ -27,15 +74,20 @@ export default function DownloaderBox() {
         throw new Error(data.error || 'Failed to fetch media information. Please check your link and try again.');
       }
 
+      trackEvent('info_fetch_success', { platform });
       setResult(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      const errorType = message.includes('fetch') ? 'network_error' : 'api_error';
+      trackEvent('info_fetch_error', { platform, error_type: errorType });
+      setError(message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getDownloadUrl = (format: any) => {
+  const getDownloadUrl = (format: DownloadFormatItem) => {
+    if (!result) return '#';
     const safeTitle = (result.title || 'download').replace(/[^a-zA-Z0-9 ]/g, '').substring(0, 60);
     const filename = `${safeTitle}_${format.quality}.${format.extension}`;
     if (result.source === 'cobalt' && format.cobaltOptions) {
@@ -48,7 +100,12 @@ export default function DownloaderBox() {
     return `/api/stream?url=${encodeURIComponent(url)}&itag=${format.itag}&filename=${encodeURIComponent(filename)}`;
   };
 
-  const filteredFormats = result?.formats?.filter((f: any) => {
+  const handleDownloadClick = (format: DownloadFormatItem) => {
+    const platform = detectPlatform(url);
+    trackEvent('download_clicked', { platform, format: format.quality, type: format.type });
+  };
+
+  const filteredFormats = result?.formats?.filter((f: DownloadFormatItem) => {
     if (activeTab === 'video') return f.type === 'video';
     if (activeTab === 'audio') return f.type === 'audio';
     return true;
@@ -115,7 +172,7 @@ export default function DownloaderBox() {
             <div className="flex-1">
               <p className="text-sm font-medium text-red-400">{error}</p>
               <button
-                onClick={() => { setError(null); handleDownloadRequest({ preventDefault: () => {} } as any); }}
+                onClick={() => { setError(null); handleDownloadRequest({ preventDefault: () => {} } as React.FormEvent); }}
                 className="mt-2 text-xs font-medium text-red-400/80 underline underline-offset-2 transition-colors hover:text-red-300"
               >
                 Try again
@@ -215,12 +272,13 @@ export default function DownloaderBox() {
 
             {/* Format List */}
             <div className="grid grid-cols-1 gap-2 p-5 sm:grid-cols-2 sm:p-6">
-              {filteredFormats.map((format: any, idx: number) => (
+              {filteredFormats.map((format: DownloadFormatItem, idx: number) => (
                 <a
                   key={idx}
                   href={getDownloadUrl(format)}
                   id={`download-format-${idx}`}
                   rel="noopener noreferrer"
+                  onClick={() => handleDownloadClick(format)}
                   className="group flex items-center justify-between rounded-xl border border-border bg-surface/50 p-3.5 transition-all hover:border-primary/40 hover:bg-surface active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">

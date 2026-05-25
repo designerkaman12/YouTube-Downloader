@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callCobaltAPI } from '@/lib/downloader';
-import { checkRateLimit, getClientIP, isAllowedSourceUrl } from '@/lib/security';
+import { checkRateLimit, getClientIP, isAllowedSourceUrl, isAllowedUrl, fetchWithTimeout } from '@/lib/security';
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -14,9 +14,9 @@ export async function GET(req: NextRequest) {
 
     // Rate limit: 15 requests per minute per IP (streaming is expensive)
     const ip = getClientIP(req);
-    const rateLimitError = checkRateLimit(ip, 'stream', 15, 60000);
-    if (rateLimitError) {
-        return NextResponse.json({ error: rateLimitError }, { status: 429 });
+    const rateLimitResult = checkRateLimit(ip, 'stream', 15, 60000);
+    if (!rateLimitResult.allowed) {
+        return NextResponse.json({ error: rateLimitResult.error }, { status: 429 });
     }
 
     // SSRF protection
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
         // If cobalt options are provided, use Cobalt API to get the download URL
         if (cobaltOptionsRaw && process.env.COBALT_API_URL) {
-            let cobaltOptions: any = {};
+            let cobaltOptions: Record<string, unknown> = {};
             try {
                 cobaltOptions = JSON.parse(decodeURIComponent(cobaltOptionsRaw));
             } catch {}
@@ -39,11 +39,12 @@ export async function GET(req: NextRequest) {
             const cobaltResult = await callCobaltAPI(url, cobaltOptions);
 
             if (cobaltResult.status === 'tunnel' || cobaltResult.status === 'redirect') {
-                downloadUrl = cobaltResult.url;
-            } else if (cobaltResult.status === 'picker' && cobaltResult.picker?.[0]?.url) {
-                downloadUrl = cobaltResult.picker[0].url;
+                downloadUrl = cobaltResult.url as string;
+            } else if (cobaltResult.status === 'picker' && Array.isArray(cobaltResult.picker) && (cobaltResult.picker[0] as Record<string, unknown>)?.url) {
+                downloadUrl = (cobaltResult.picker[0] as Record<string, unknown>).url as string;
             } else if (cobaltResult.status === 'error') {
-                throw new Error(`Cobalt error: ${cobaltResult.error?.code || 'unknown'}`);
+                const errObj = cobaltResult.error as Record<string, unknown> | undefined;
+                throw new Error(`Cobalt error: ${errObj?.code || 'unknown'}`);
             }
 
             if (!downloadUrl) {
@@ -54,10 +55,16 @@ export async function GET(req: NextRequest) {
             downloadUrl = url;
         }
 
+        // Validate the resolved download URL before fetching
+        if (!isAllowedUrl(downloadUrl)) {
+            return NextResponse.json({ error: 'Download URL not allowed' }, { status: 403 });
+        }
+
         console.log(`  🔗 Proxied stream: ${filename}`);
 
         // PROXY THE STREAM
-        const streamResponse = await fetch(downloadUrl, {
+        const streamResponse = await fetchWithTimeout(downloadUrl, {
+            timeout: 60000,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'Accept': '*/*',
@@ -80,8 +87,9 @@ export async function GET(req: NextRequest) {
         // Return a response with the stream body
         return new NextResponse(streamResponse.body, { headers });
 
-    } catch (error: any) {
-        console.error(`  ❌ Stream Error: ${error.message}`);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`  ❌ Stream Error: ${message}`);
+        return NextResponse.json({ error: 'Download failed. Please try again.' }, { status: 500 });
     }
 }

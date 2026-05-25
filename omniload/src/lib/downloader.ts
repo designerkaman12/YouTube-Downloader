@@ -22,7 +22,7 @@ export interface DownloadFormat {
     size: string;
     audioAvailable: boolean;
     hasAudio?: boolean;
-    cobaltOptions?: any;
+    cobaltOptions?: Record<string, unknown>;
     itag?: string;
 }
 
@@ -70,13 +70,13 @@ export function isYouTube(url: string): boolean {
 /**
  * Call Cobalt API (only if a custom instance URL is configured via env)
  */
-export async function callCobaltAPI(url: string, options: any = {}): Promise<any> {
+export async function callCobaltAPI(url: string, options: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
     if (COBALT_INSTANCES.length === 0) {
         throw new Error('No Cobalt API instance configured.');
     }
 
     const body = { url, ...options };
-    let lastError: any = null;
+    let lastError: unknown = null;
 
     for (const cobaltUrl of COBALT_INSTANCES) {
         console.log(`  🔷 Trying Cobalt API: POST ${cobaltUrl}/`);
@@ -111,20 +111,21 @@ export async function callCobaltAPI(url: string, options: any = {}): Promise<any
             console.log(`  ✅ Success with ${cobaltUrl}`);
             return data;
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             clearTimeout(timeout);
-            console.warn(`  ⚠️ Failed (${cobaltUrl}): ${err.name === 'AbortError' ? 'Timeout' : err.message}`);
+            const isAbort = err instanceof Error && err.name === 'AbortError';
+            console.warn(`  ⚠️ Failed (${cobaltUrl}): ${isAbort ? 'Timeout' : (err instanceof Error ? err.message : 'Unknown error')}`);
             lastError = err;
         }
     }
 
-    throw new Error(`Cobalt API failed. ${lastError?.message}`);
+    throw new Error(`Cobalt API failed. ${lastError instanceof Error ? lastError.message : 'Unknown error'}`);
 }
 
 /**
  * Call RapidAPI — primary download method for ALL platforms
  */
-export async function callRapidAPI(url: string): Promise<any> {
+export async function callRapidAPI(url: string): Promise<Record<string, unknown>> {
     if (!RAPIDAPI_KEY) {
         throw new Error('RAPIDAPI_KEY is not configured. Please set it in environment variables.');
     }
@@ -156,9 +157,9 @@ export async function callRapidAPI(url: string): Promise<any> {
         }
 
         return await response.json();
-    } catch (err: any) {
+    } catch (err: unknown) {
         clearTimeout(timeout);
-        if (err.name === 'AbortError') throw new Error('API request timed out. Please try again.');
+        if (err instanceof Error && err.name === 'AbortError') throw new Error('API request timed out. Please try again.');
         throw err;
     }
 }
@@ -168,35 +169,35 @@ export async function callRapidAPI(url: string): Promise<any> {
 /**
  * Get info for ANY platform via RapidAPI (primary method)
  */
-export function processRapidAPIResult(apiData: any, platform: string, originalUrl: string): DownloaderResult {
-    const title = apiData.title || 'Unknown Title';
-    const author = apiData.author || apiData.source || platform;
-    const thumbnail = apiData.thumbnail || '';
-    const duration = apiData.duration || '';
+export function processRapidAPIResult(apiData: Record<string, unknown>, platform: string, originalUrl: string): DownloaderResult {
+    const title = (apiData.title as string) || 'Unknown Title';
+    const author = (apiData.author as string) || (apiData.source as string) || platform;
+    const thumbnail = (apiData.thumbnail as string) || '';
+    const duration = (apiData.duration as number | string) || '';
 
     const formats: DownloadFormat[] = [];
 
     if (apiData.medias && Array.isArray(apiData.medias)) {
-        apiData.medias.forEach((media: any, i: number) => {
+        (apiData.medias as Record<string, unknown>[]).forEach((media: Record<string, unknown>, i: number) => {
             const isAudio = (media.type === 'audio') || 
                            (media.extension === 'm4a') || 
                            (media.extension === 'opus') || 
                            (media.extension === 'mp3');
             
             formats.push({
-                quality: media.quality || `Option ${i + 1}`,
-                url: media.url,
-                extension: media.extension || 'mp4',
+                quality: (media.quality as string) || `Option ${i + 1}`,
+                url: media.url as string,
+                extension: (media.extension as string) || 'mp4',
                 type: isAudio ? 'audio' : 'video',
-                size: media.formattedSize || media.size || '',
-                audioAvailable: media.audioAvailable !== undefined ? media.audioAvailable : true,
-                hasAudio: media.audioAvailable !== undefined ? media.audioAvailable : !isAudio,
+                size: (media.formattedSize as string) || (media.size as string) || '',
+                audioAvailable: media.audioAvailable !== undefined ? (media.audioAvailable as boolean) : true,
+                hasAudio: media.audioAvailable !== undefined ? (media.audioAvailable as boolean) : !isAudio,
             });
         });
     } else if (apiData.url) {
         formats.push({
             quality: 'Default',
-            url: apiData.url,
+            url: apiData.url as string,
             extension: 'mp4',
             type: 'video',
             size: '',
@@ -247,7 +248,7 @@ export async function getYouTubeInfoCobalt(url: string): Promise<DownloaderResul
     let thumbnail = '';
 
     if (testResult.filename) {
-        title = testResult.filename.replace(/\.[^.]+$/, ''); 
+        title = (testResult.filename as string).replace(/\.[^.]+$/, ''); 
     }
 
     let videoId = '';

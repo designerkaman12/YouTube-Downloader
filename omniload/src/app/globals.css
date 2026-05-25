@@ -206,3 +206,143 @@ body {
   margin-left: auto;
   margin-right: auto;
 }
+
+/* ─── TRUST SECTION ────────────────────────────────────────── */
+.trust-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+.trust-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+/* ─── USE CASE CARDS ───────────────────────────────────────── */
+.use-case-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+.use-case-card:hover {
+  border-color: var(--primary);
+}
+
+/* ─── SEO LINK GRID ────────────────────────────────────────── */
+.seo-link-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+  color: var(--foreground);
+  transition: all 0.2s ease;
+}
+.seo-link-card:hover {
+  border-color: var(--primary);
+  background: var(--card-hover);
+}
+
+/* ─── AD SLOT ──────────────────────────────────────────────── */
+.ad-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+.ad-slot-live {
+  border-style: solid;
+  opacity: 1;
+}
+
+/* ─── NEWSLETTER ───────────────────────────────────────────── */
+.newsletter-section {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+}
+
+/* ─── PRICING CARDS ────────────────────────────────────────── */
+.pricing-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+  transition: all 0.3s ease;
+}
+.pricing-card:hover {
+  transform: translateY(-4px);
+}
+.pricing-card.featured {
+  border-color: var(--primary);
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
+}
+
+/* ─── LEGAL PAGES ──────────────────────────────────────────── */
+.legal-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+.legal-page h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.legal-page h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  color: var(--foreground);
+}
+.legal-page p, .legal-page li {
+  color: var(--muted);
+  line-height: 1.7;
+  margin-bottom: 0.75rem;
+}
+.legal-page ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+}
+
+/* ─── AFFILIATE CARDS ──────────────────────────────────────── */
+.affiliate-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition: all 0.3s ease;
+}
+.affiliate-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+/* ─── COOKIE NOTICE ────────────────────────────────────────── */
+.cookie-notice {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(15, 15, 20, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  padding: 1rem;
+  z-index: 9999;
+}
+

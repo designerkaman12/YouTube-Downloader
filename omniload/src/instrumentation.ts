@@ -29,8 +29,8 @@ export async function register() {
                     const res = await fetch(`${appUrl}/api/health`);
                     const data = await res.json();
                     console.log(`💓 Keep-alive ping OK | uptime: ${Math.round(data.uptime)}s`);
-                } catch (err: any) {
-                    console.log(`⚠️  Keep-alive ping failed: ${err.message}`);
+                } catch (err: unknown) {
+                    console.log(`⚠️  Keep-alive ping failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
                 }
             }, PING_INTERVAL);
         }, 30000);

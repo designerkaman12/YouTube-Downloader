@@ -3,6 +3,11 @@
  * Prevents abuse, protects RapidAPI credits, and blocks SSRF attacks.
  */
 
+// ─── SIZE LIMITS ────────────────────────────────────────────
+
+export const MAX_DOWNLOAD_SIZE = 500 * 1024 * 1024; // 500MB
+export const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+
 // ─── RATE LIMITER ────────────────────────────────────────────
 
 interface RateLimitEntry {
@@ -31,23 +36,32 @@ export function checkRateLimit(
     endpoint: string,
     maxRequests: number = 30,
     windowMs: number = 60 * 1000 // 1 minute window
-): string | null {
+): { allowed: boolean; error?: string } {
+    // Allow disabling rate limiting for development
+    const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
+    if (!rateLimitEnabled) {
+        return { allowed: true };
+    }
+
     const key = `${ip}:${endpoint}`;
     const now = Date.now();
     const entry = rateLimitMap.get(key);
 
     if (!entry || now > entry.resetTime) {
         rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
-        return null;
+        return { allowed: true };
     }
 
     entry.count++;
 
     if (entry.count > maxRequests) {
-        return `Rate limit exceeded. Please wait ${Math.ceil((entry.resetTime - now) / 1000)} seconds.`;
+        return {
+            allowed: false,
+            error: `Rate limit exceeded. Please wait ${Math.ceil((entry.resetTime - now) / 1000)} seconds.`
+        };
     }
 
-    return null;
+    return { allowed: true };
 }
 
 /**
@@ -122,7 +136,7 @@ export function isAllowedUrl(urlString: string): boolean {
             hostname === '127.0.0.1' ||
             hostname === '0.0.0.0' ||
             hostname.startsWith('10.') ||
-            hostname.startsWith('172.') ||
+            isPrivate172(hostname) ||
             hostname.startsWith('192.168.') ||
             hostname === '169.254.169.254' || // AWS metadata
             hostname.endsWith('.internal') ||
@@ -167,4 +181,53 @@ export function isAllowedSourceUrl(urlString: string): boolean {
     } catch {
         return false;
     }
+}
+
+// ─── PRIVATE IP HELPERS ─────────────────────────────────────
+
+/**
+ * Checks if a hostname is in the 172.16.0.0 - 172.31.255.255 private range.
+ * The previous check blocked ALL 172.* which was too broad.
+ */
+function isPrivate172(hostname: string): boolean {
+    if (!hostname.startsWith('172.')) return false;
+    const parts = hostname.split('.');
+    if (parts.length !== 4) return false;
+    const secondOctet = parseInt(parts[1], 10);
+    return secondOctet >= 16 && secondOctet <= 31;
+}
+
+// ─── FETCH HELPERS ──────────────────────────────────────────
+
+/**
+ * Fetch with an AbortController timeout.
+ * Prevents requests from hanging indefinitely.
+ */
+export async function fetchWithTimeout(
+    url: string,
+    options: RequestInit & { timeout?: number } = {}
+): Promise<Response> {
+    const { timeout = 60000, ...fetchOptions } = options;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+        const response = await fetch(url, {
+            ...fetchOptions,
+            signal: controller.signal,
+        });
+        return response;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+/**
+ * Check if response Content-Length exceeds the maximum allowed size.
+ * Returns true if the content is within limits (or no Content-Length header).
+ */
+export function checkContentLength(response: Response, maxBytes: number): boolean {
+    const contentLength = response.headers.get('content-length');
+    if (!contentLength) return true; // No header — allow (streaming will handle it)
+    return parseInt(contentLength, 10) <= maxBytes;
 }

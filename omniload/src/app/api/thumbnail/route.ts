@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkRateLimit, getClientIP } from '@/lib/security';
+import { checkRateLimit, getClientIP, fetchWithTimeout, checkContentLength, MAX_IMAGE_SIZE } from '@/lib/security';
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -11,9 +11,9 @@ export async function GET(req: NextRequest) {
 
     // Rate limit: 60 per minute (thumbnails are lightweight)
     const ip = getClientIP(req);
-    const rateLimitError = checkRateLimit(ip, 'thumbnail', 60, 60000);
-    if (rateLimitError) {
-        return new NextResponse(rateLimitError, { status: 429 });
+    const rateLimitResult = checkRateLimit(ip, 'thumbnail', 60, 60000);
+    if (!rateLimitResult.allowed) {
+        return new NextResponse(rateLimitResult.error, { status: 429 });
     }
 
     // Only allow image URLs from known CDNs
@@ -45,8 +45,13 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const response = await fetch(url);
+        const response = await fetchWithTimeout(url, { timeout: 30000 });
         if (!response.ok) return new NextResponse('Thumbnail not found', { status: 404 });
+
+        // Check image size limit
+        if (!checkContentLength(response, MAX_IMAGE_SIZE)) {
+            return new NextResponse('Image too large', { status: 413 });
+        }
 
         const contentType = response.headers.get('content-type') || 'image/jpeg';
         
@@ -56,6 +61,6 @@ export async function GET(req: NextRequest) {
 
         return new NextResponse(response.body, { headers });
     } catch {
-        return new NextResponse('Failed to fetch thumbnail', { status: 500 });
+        return new NextResponse('Failed to fetch thumbnail. Please try again.', { status: 500 });
     }
 }

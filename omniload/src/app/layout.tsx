@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import Analytics from "@/components/Analytics";
+import CookieNotice from "@/components/CookieNotice";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,30 +21,27 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omniload.onrender.c
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "OmniLoad — Free Online Video & Audio Downloader | 12+ Platforms",
+    default: "OmniLoad - Fast Media Link Utility for Public Content",
     template: "%s | OmniLoad",
   },
   description:
-    "Download videos and audio from YouTube, Instagram, TikTok, Twitter/X, Facebook, Pinterest, Reddit, and 12+ platforms for free. No signup, no limits, up to 8K quality.",
+    "OmniLoad is a fast media utility that helps process publicly available media links for permitted personal use. Simple, clean, and creator-friendly.",
   keywords: [
-    "video downloader",
-    "youtube downloader",
-    "instagram downloader",
-    "tiktok downloader",
-    "twitter video download",
-    "facebook video downloader",
+    "media link utility",
+    "video saver",
+    "youtube video saver",
+    "instagram saver",
+    "tiktok saver",
+    "twitter video saver",
+    "facebook video saver",
     "mp3 converter",
-    "online video downloader",
-    "free video downloader",
-    "social media downloader",
-    "reddit video downloader",
-    "pinterest downloader",
-    "vimeo downloader",
-    "spotify downloader",
-    "soundcloud downloader",
-    "download video online",
-    "save instagram reels",
-    "tiktok without watermark",
+    "online media tool",
+    "social media saver",
+    "video to mp3",
+    "audio converter",
+    "content creator tools",
+    "media processing",
+    "link processing tool",
   ],
   authors: [{ name: "OmniLoad" }],
   creator: "OmniLoad",
@@ -63,22 +62,22 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: siteUrl,
     siteName: "OmniLoad",
-    title: "OmniLoad — Free Online Video & Audio Downloader",
+    title: "OmniLoad - Fast Media Link Utility for Public Content",
     description:
-      "Download high-quality video and audio from 12+ platforms. Free, fast, no registration.",
+      "Process publicly available media links from popular platforms. Fast, clean, and creator-friendly.",
     images: [
       {
         url: `${siteUrl}/og-image.png`,
         width: 1200,
         height: 630,
-        alt: "OmniLoad - Download videos from any platform",
+        alt: "OmniLoad - Fast Media Link Utility",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "OmniLoad — Free Video & Audio Downloader",
-    description: "Download videos from YouTube, Instagram, TikTok & 12+ platforms for free.",
+    title: "OmniLoad - Fast Media Link Utility",
+    description: "Process media links from YouTube, Instagram, TikTok & popular platforms. Simple and creator-friendly.",
     images: [`${siteUrl}/og-image.png`],
   },
   alternates: {
@@ -96,7 +95,7 @@ const jsonLd = {
   name: "OmniLoad",
   url: siteUrl,
   description:
-    "Free online video and audio downloader supporting 12+ platforms including YouTube, Instagram, TikTok, Twitter, Facebook, and more.",
+    "Fast media link utility for processing publicly available content from popular platforms. Simple, clean, and permission-first.",
   applicationCategory: "MultimediaApplication",
   operatingSystem: "Any",
   offers: {
@@ -105,11 +104,11 @@ const jsonLd = {
     priceCurrency: "USD",
   },
   featureList: [
-    "Download videos from 12+ platforms",
-    "Support up to 8K quality",
-    "MP3 audio extraction",
+    "Process media links from popular platforms",
+    "Multiple quality and format options",
+    "Audio extraction from video",
     "No registration required",
-    "Unlimited downloads",
+    "Clean, creator-friendly interface",
   ],
 };
 
@@ -119,10 +118,10 @@ const faqJsonLd = {
   mainEntity: [
     {
       "@type": "Question",
-      name: "Is OmniLoad completely free to use?",
+      name: "Is OmniLoad free to use?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes, OmniLoad is 100% free with no hidden costs or premium tiers. You can download unlimited videos and audio files without any registration or payment.",
+        text: "OmniLoad offers free access to core features. Some advanced features may be available through our Premium plan. No signup is required for basic use.",
       },
     },
     {
@@ -130,7 +129,7 @@ const faqJsonLd = {
       name: "What platforms does OmniLoad support?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "OmniLoad supports 12+ platforms including YouTube, Instagram, TikTok, Twitter/X, Facebook, Pinterest, Reddit, Snapchat, LinkedIn, Threads, Vimeo, and Dailymotion.",
+        text: "OmniLoad supports processing links from popular platforms including YouTube, Instagram, TikTok, Twitter/X, Facebook, and others. Availability depends on each platform's policies.",
       },
     },
     {
@@ -138,7 +137,7 @@ const faqJsonLd = {
       name: "What quality options are available?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "We support a wide range of qualities from 360p all the way up to 8K Ultra HD for video. For audio, we support MP3 (128kbps-320kbps), OGG, WAV, and OPUS formats.",
+        text: "Available quality options depend on the source content. We display all formats and resolutions that the platform makes available for publicly accessible media.",
       },
     },
     {
@@ -146,7 +145,7 @@ const faqJsonLd = {
       name: "Do I need to install any software?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "No, OmniLoad works entirely in your web browser. Just paste a link and download — no software, browser extensions, or apps needed.",
+        text: "No, OmniLoad works entirely in your web browser. Just paste a link and process — no software, browser extensions, or apps needed.",
       },
     },
     {
@@ -154,7 +153,7 @@ const faqJsonLd = {
       name: "Is it safe to use OmniLoad?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes, OmniLoad is completely safe. We don't store any of your downloads or personal information. All processing happens in real-time and we use secure HTTPS connections.",
+        text: "Yes, OmniLoad is designed with user safety in mind. We don't store your personal information. All processing happens in real-time and we use secure HTTPS connections.",
       },
     },
   ],
@@ -168,17 +167,6 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth">
       <head>
-        {/* Google Analytics — set NEXT_PUBLIC_GA_ID env var to enable */}
-        {process.env.NEXT_PUBLIC_GA_ID && (
-          <>
-            <script async src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`} />
-            <script
-              dangerouslySetInnerHTML={{
-                __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${process.env.NEXT_PUBLIC_GA_ID}');`,
-              }}
-            />
-          </>
-        )}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -191,9 +179,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
+        <Analytics />
         <Navbar />
         <main className="flex-grow">{children}</main>
         <Footer />
+        <CookieNotice />
       </body>
     </html>
   );
