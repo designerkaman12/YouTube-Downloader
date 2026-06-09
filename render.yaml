@@ -14,7 +14,3 @@ services:
         value: production
       - key: NODE_VERSION
         value: 20.11.0
-      - key: RAPIDAPI_KEY
-        sync: false
-      - key: COBALT_API_URL
-        sync: false

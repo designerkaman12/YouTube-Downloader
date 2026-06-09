@@ -1,289 +1,68 @@
-import Link from 'next/link';
-import type { Metadata } from 'next';
+import { Metadata } from "next";
+import { SITE_CONFIG } from "@/lib/constants";
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | OmniLoad',
-  description:
-    'OmniLoad terms of service — rules, guidelines, and responsibilities for using our media link processing platform.',
+  title: "Terms of Service",
+  description: "OmniLoad Terms of Service — Rules and guidelines for using our free video and audio download service.",
+  alternates: { canonical: `${SITE_CONFIG.url}/terms` },
 };
 
 export default function TermsPage() {
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-16 sm:px-6 sm:py-24">
-      <h1 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
-        Terms of Service
-      </h1>
-      <p className="mb-10 text-sm text-muted-foreground">
-        Last updated: May 25, 2026
-      </p>
+    <div className="py-16 sm:py-24">
+      <div className="container mx-auto max-w-3xl px-4 sm:px-6">
+        <h1 className="mb-2 text-3xl font-extrabold tracking-tight sm:text-4xl">Terms of Service</h1>
+        <p className="mb-10 text-sm text-[hsl(var(--muted-foreground))]">Last updated: June 1, 2026</p>
 
-      <div className="space-y-10 text-sm leading-relaxed text-muted-foreground">
-        {/* Intro */}
-        <p>
-          Please read these Terms of Service (&ldquo;Terms&rdquo;) carefully
-          before using OmniLoad. By accessing or using our service, you agree to
-          be bound by these Terms. If you do not agree, please do not use the
-          service.
-        </p>
+        <div className="prose max-w-none space-y-6">
+          <h2>1. Acceptance of Terms</h2>
+          <p>By accessing and using OmniLoad ({SITE_CONFIG.url}), you accept and agree to be bound by these Terms of Service. If you do not agree with any part of these terms, you must not use our service.</p>
 
-        {/* 1 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            1. Acceptance of Terms
-          </h2>
-          <p>
-            By accessing, browsing, or using OmniLoad in any way, you
-            acknowledge that you have read, understood, and agree to be bound by
-            these Terms of Service and our{' '}
-            <Link href="/privacy" className="text-primary hover:underline">
-              Privacy Policy
-            </Link>
-            . These Terms apply to all visitors, users, and anyone who accesses
-            the service.
-          </p>
-        </section>
+          <h2>2. Description of Service</h2>
+          <p>OmniLoad provides a free online tool that allows users to download publicly available video and audio content from various platforms. Our service is provided &quot;as is&quot; and &quot;as available&quot; without any warranties.</p>
 
-        {/* 2 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            2. Description of Service
-          </h2>
-          <p>
-            OmniLoad is a media link processing utility that generates download
-            links for publicly available content hosted on third-party
-            platforms. We act as an intermediary tool — we do{' '}
-            <strong className="text-foreground">not</strong> host, store, or
-            distribute any media content. All content remains on its original
-            hosting platform. OmniLoad processes URLs submitted by users in
-            real-time to provide available download options.
-          </p>
-        </section>
-
-        {/* 3 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            3. User Responsibilities
-          </h2>
-          <p className="mb-3">
-            As a user of OmniLoad, you acknowledge and agree that:
-          </p>
-          <ul className="ml-4 list-disc space-y-2">
-            <li>
-              You must have the necessary rights, permissions, or authorization
-              to download or process any content you submit through our service.
-            </li>
-            <li>
-              You are solely responsible for ensuring your use of downloaded
-              content complies with all applicable local, national, and
-              international laws and regulations.
-            </li>
-            <li>
-              You are responsible for complying with the terms of service of the
-              original content platforms.
-            </li>
-            <li>
-              You will not use OmniLoad for any illegal, unauthorized, or
-              unethical purpose.
-            </li>
-            <li>
-              You will not attempt to reverse-engineer, decompile, modify, or
-              disrupt the service or its infrastructure.
-            </li>
+          <h2>3. Acceptable Use</h2>
+          <p>You agree to use OmniLoad only for lawful purposes. You must not:</p>
+          <ul>
+            <li>Download copyrighted content without permission from the copyright holder</li>
+            <li>Use the service to download private or restricted content</li>
+            <li>Redistribute downloaded content for commercial purposes without authorization</li>
+            <li>Use automated tools or bots to access our service</li>
+            <li>Attempt to bypass any security measures on our website</li>
+            <li>Use the service in any way that could damage or impair the service</li>
           </ul>
-        </section>
 
-        {/* 4 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            4. Prohibited Uses
-          </h2>
-          <p className="mb-3">
-            You expressly agree <strong className="text-foreground">not</strong>{' '}
-            to use OmniLoad for the following:
-          </p>
-          <ul className="ml-4 list-disc space-y-2">
-            <li>
-              <strong className="text-foreground">
-                Copyright infringement
-              </strong>{' '}
-              — Downloading or redistributing copyrighted content without
-              permission from the rights holder.
-            </li>
-            <li>
-              <strong className="text-foreground">
-                Unauthorized distribution
-              </strong>{' '}
-              — Sharing, selling, or distributing downloaded content without
-              proper authorization.
-            </li>
-            <li>
-              <strong className="text-foreground">DRM circumvention</strong> —
-              Using the service to circumvent or bypass any digital rights
-              management (DRM) protections.
-            </li>
-            <li>
-              <strong className="text-foreground">
-                Automated or bot access
-              </strong>{' '}
-              — Using scripts, bots, crawlers, or any automated means to access
-              or interact with the service without prior written consent.
-            </li>
-            <li>
-              <strong className="text-foreground">Service abuse</strong> —
-              Overloading, spamming, or otherwise disrupting the availability or
-              performance of OmniLoad for other users.
-            </li>
+          <h2>4. Intellectual Property</h2>
+          <p>OmniLoad does not host, store, or own any of the content downloaded through our service. We provide links to publicly available content and are not responsible for the content created by third parties.</p>
+          <p>Users are solely responsible for ensuring they have the right to download and use any content obtained through our service.</p>
+
+          <h2>5. Copyright and DMCA</h2>
+          <p>We respect intellectual property rights. If you believe any content accessible through our service infringes your copyright, please see our <a href="/dmca">DMCA Policy</a> for instructions on how to submit a takedown request.</p>
+
+          <h2>6. Disclaimer of Warranties</h2>
+          <p>OmniLoad is provided on an &quot;as is&quot; and &quot;as available&quot; basis. We make no warranties, express or implied, regarding:</p>
+          <ul>
+            <li>The availability or reliability of the service</li>
+            <li>The accuracy of download quality or format options</li>
+            <li>The compatibility of downloaded files with your device</li>
+            <li>Freedom from viruses or other harmful components</li>
           </ul>
-        </section>
 
-        {/* 5 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            5. Platform Non-Affiliation
-          </h2>
-          <p>
-            OmniLoad is an independent service and is{' '}
-            <strong className="text-foreground">not</strong> affiliated with,
-            endorsed by, or sponsored by any third-party platforms, including
-            but not limited to YouTube, Google, Instagram, Meta, Facebook,
-            TikTok, ByteDance, X (formerly Twitter), Pinterest, Reddit,
-            Snapchat, LinkedIn, Vimeo, Dailymotion, Spotify, SoundCloud, or any
-            other content platform. All trademarks and brand names belong to
-            their respective owners.
-          </p>
-        </section>
+          <h2>7. Limitation of Liability</h2>
+          <p>To the maximum extent permitted by law, OmniLoad and its operators shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the service.</p>
 
-        {/* 6 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            6. Intellectual Property
-          </h2>
-          <p>
-            All media content accessed through OmniLoad belongs to its
-            respective copyright owners. OmniLoad does not claim ownership of
-            any content processed through our service. The OmniLoad name, logo,
-            and website design are the intellectual property of OmniLoad and may
-            not be reproduced without permission. Users are responsible for
-            respecting all intellectual property rights when using our service.
-          </p>
-        </section>
+          <h2>8. Third-Party Content and Advertisements</h2>
+          <p>Our website may display advertisements provided by Google AdSense and may contain links to third-party websites. We are not responsible for the content, privacy practices, or policies of third-party websites or advertisers.</p>
 
-        {/* 7 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            7. Disclaimer of Warranties
-          </h2>
-          <p>
-            OmniLoad is provided on an{' '}
-            <strong className="text-foreground">
-              &ldquo;as is&rdquo; and &ldquo;as available&rdquo;
-            </strong>{' '}
-            basis without warranties of any kind, whether express or implied,
-            including but not limited to implied warranties of merchantability,
-            fitness for a particular purpose, or non-infringement. We do not
-            guarantee that the service will be uninterrupted, error-free,
-            secure, or that all links will be successfully processed.
-          </p>
-        </section>
+          <h2>9. Modifications to Terms</h2>
+          <p>We reserve the right to modify these Terms of Service at any time. Changes will be effective immediately upon posting to this page. Your continued use of the service after any changes constitutes acceptance of the new terms.</p>
 
-        {/* 8 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            8. Limitation of Liability
-          </h2>
-          <p>
-            To the maximum extent permitted by applicable law, OmniLoad and its
-            operators, developers, and affiliates shall not be held liable for
-            any direct, indirect, incidental, special, consequential, or
-            punitive damages arising out of or in connection with your use of
-            the service. This includes, but is not limited to, damages for loss
-            of data, profits, goodwill, or other intangible losses, even if we
-            have been advised of the possibility of such damages.
-          </p>
-        </section>
+          <h2>10. Governing Law</h2>
+          <p>These Terms of Service shall be governed by and construed in accordance with applicable laws, without regard to conflict of law principles.</p>
 
-        {/* 9 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            9. Abusive Usage
-          </h2>
-          <p>
-            We reserve the right to block, throttle, or restrict access to
-            OmniLoad for any user or IP address that we determine, in our sole
-            discretion, to be engaging in abusive, fraudulent, or excessive
-            usage of the service. This includes automated scraping, denial-of-
-            service attempts, or any behavior that negatively impacts the
-            service for other users.
-          </p>
-        </section>
-
-        {/* 10 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            10. Termination
-          </h2>
-          <p>
-            We reserve the right to suspend or terminate access to OmniLoad at
-            any time, for any reason, without prior notice or liability. Upon
-            termination, your right to use the service will immediately cease.
-            All provisions of these Terms that by their nature should survive
-            termination shall survive, including ownership provisions, warranty
-            disclaimers, and limitations of liability.
-          </p>
-        </section>
-
-        {/* 11 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            11. Changes to Terms
-          </h2>
-          <p>
-            We reserve the right to modify or replace these Terms at any time.
-            Changes will be posted on this page with an updated &ldquo;Last
-            updated&rdquo; date. Your continued use of OmniLoad after any
-            modifications constitutes acceptance of the revised Terms. We
-            encourage you to review this page periodically.
-          </p>
-        </section>
-
-        {/* 12 */}
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-foreground">
-            12. Contact Us
-          </h2>
-          <p>
-            If you have any questions or concerns about these Terms of Service,
-            please contact us at{' '}
-            <a
-              href="mailto:support@omniload.app"
-              className="text-primary hover:underline"
-            >
-              support@omniload.app
-            </a>
-            .
-          </p>
-        </section>
-      </div>
-
-      <div className="mt-12 flex items-center gap-6">
-        <Link
-          href="/"
-          className="text-sm font-medium text-primary hover:underline"
-        >
-          ← Back to Home
-        </Link>
-        <Link
-          href="/privacy"
-          className="text-sm font-medium text-muted-foreground hover:text-foreground"
-        >
-          Privacy Policy
-        </Link>
-        <Link
-          href="/dmca"
-          className="text-sm font-medium text-muted-foreground hover:text-foreground"
-        >
-          DMCA Policy
-        </Link>
+          <h2>11. Contact</h2>
+          <p>For questions about these Terms, contact us at <a href={`mailto:${SITE_CONFIG.email}`}>{SITE_CONFIG.email}</a>.</p>
+        </div>
       </div>
     </div>
   );
